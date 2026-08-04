@@ -63,3 +63,31 @@ def utcnow() -> datetime:
 
 def new_uuid() -> str:
     return str(uuid.uuid4())
+
+
+# ── تشفير بيانات الهوية الشخصية ساكنة (ملف 10 SECURITY_POLICY §Data) ──
+def _pii_fernet():
+    from cryptography.fernet import Fernet
+    import base64
+    # اشتقاق 32 بايت من سر JWT — مفاتيح PII تُدار عبر البيئة (BACKEND_PII_KEY لاحقاً)
+    raw = hashlib.sha256(get_settings().jwt_secret.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(raw))
+
+
+def encrypt_pii(plain: str) -> str:
+    """AT rest encryption لهوية النزيل؛ غير قابلة للبحث عمداً (انظر ADR)."""
+    if not plain:
+        return ''
+    return _pii_fernet().encrypt(plain.encode('utf-8')).decode('ascii')
+
+
+def decrypt_pii(token: str) -> str:
+    if not token:
+        return ''
+    return _pii_fernet().decrypt(token.encode('ascii')).decode('utf-8')
+
+
+def mask_id(token: str) -> str:
+    """عرض مقنّع: آخر 4 خانات فقط (لا فك كامل في قوائم العرض)."""
+    plain = decrypt_pii(token)
+    return ('****' + plain[-4:]) if plain else ''

@@ -103,19 +103,42 @@ COA = [
  ('8002', 'حساب افتتاحي مرحلي للترحيل', '8000', 'SYSTEM', 'DEBIT', True, False, True),
 ]
 
+# صلاحيات الفندق (ملف 03 — فصل المهام SoD)
+HOTEL_OPS_PERMS = ['frontdesk.view', 'reservations.view', 'guests.view',
+                   'corporates.view', 'reports.hotel', 'rooms.view']
+FRONTDESK_WORK = ['reservations.create', 'reservations.modify',
+                  'reservations.cancel', 'guests.manage', 'checkin.do',
+                  'checkout.do', 'folio.charge', 'folio.pay', 'folio.view']
+
 ROLES = [
  ('OWNER', 'مالك', 'كل الصلاحيات', ['*']),
  ('GM', 'مدير عام', 'إدارة التشغيل والتقارير والاعتمادات',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.post',
-   'journals.reverse', 'periods.close', 'settings.manage']),
+   'journals.reverse', 'periods.close', 'settings.manage']
+  + HOTEL_OPS_PERMS + FRONTDESK_WORK
+  + ['corporates.manage', 'checkout.credit_transfer', 'discounts.approve',
+     'nightaudit.run', 'hk.manage', 'rooms.manage', 'rates.manage',
+     'extras.manage', 'checkin.dirty_override', 'audit.view']),
  ('FINANCE_MANAGER', 'مدير مالي', 'المحاسبة الكاملة والإغلاق',
   ['reports.view', 'accounts.view', 'accounts.manage', 'journals.view',
-   'journals.manual', 'journals.post', 'journals.reverse', 'periods.close']),
+   'journals.manual', 'journals.post', 'journals.reverse', 'periods.close']
+  + HOTEL_OPS_PERMS
+  + ['discounts.approve', 'checkout.credit_transfer', 'corporates.manage',
+     'folio.view']),
  ('ACCOUNTANT', 'محاسب', 'إدخال ومراجعة',
-  ['reports.view', 'accounts.view', 'journals.view', 'journals.manual']),
+  ['reports.view', 'accounts.view', 'journals.view', 'journals.manual',
+   'reports.hotel', 'folio.view']),
  ('AUDITOR', 'مدقق داخلي', 'قراءة وتدقيق فقط',
-  ['reports.view', 'accounts.view', 'journals.view', 'audit.view']),
- ('RECEPTIONIST', 'موظف استقبال', 'حجوزات وتحصيل', []),
+  ['reports.view', 'accounts.view', 'journals.view', 'audit.view',
+   'reports.hotel', 'folio.view', 'frontdesk.view']),
+ ('RECEPTIONIST', 'موظف استقبال', 'حجوزات وتسكين وتحصيل',
+  HOTEL_OPS_PERMS + FRONTDESK_WORK + ['folio.discount']),
+ ('NIGHT_AUDITOR', 'مدقق ليلي', 'إجراء إقفال يوم العمل',
+  HOTEL_OPS_PERMS + ['nightaudit.run', 'journals.view', 'folio.view']),
+ ('HOUSEKEEPING', 'موظفة طابق', 'تنظيف الغرف: Dirty→Cleaning→Clean',
+  ['frontdesk.view', 'rooms.view', 'hk.cleaning']),
+ ('HK_SUPERVISOR', 'مشرف طوابق', 'فحص الغرف ومناطق التعطيل',
+  ['frontdesk.view', 'rooms.view', 'hk.cleaning', 'hk.manage']),
 ]
 
 POSTING_MAPS = [
@@ -156,10 +179,142 @@ POSTING_MAPS = [
    {'account': '1110', 'side': 'C', 'from': 'amount', 'party': True,
     'party_type': 'GUEST', 'desc': 'سداد ذمة نزيل'}]),
  ('CITY_LEDGER_TRANSFER', 'نقل ذمة نزيل إلى شركة عند الخروج',
+  [{'account': '1120', 'side': 'D', 'from': 'amount',
+    'party_key': 'corporate', 'desc': 'ذمة شركة'},
+   {'account': '1110', 'side': 'C', 'from': 'amount',
+    'party_key': 'folio', 'desc': 'إقفال ذمة نزيل'}]),
+]
+
+# خرائط أحداث الفندق — ملف 02 §8 بالأرقام المرجعية #01..#08 والملحقات
+# (event_type, context_key, وصف, القالب) — السياق None = الافتراضي
+HOTEL_POSTING_MAPS = [
+ # #03 عدم حضور — نزيل مباشر (من عربونه المعلّق)
+ ('NO_SHOW', 'GUEST', 'عدم حضور باحتساب ليلة (نزيل مباشر)',
+  [{'account': '2110', 'side': 'D', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'إعدام عربون'},
+   {'account': '4102', 'side': 'C', 'from': 'net', 'desc': 'إيراد عدم الحضور'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ # #03 عدم حضور — مؤكد بشركة (الذمة على الشركة)
+ ('NO_SHOW', 'CORPORATE', 'عدم حضور باحتساب ليلة (مؤكد بشركة)',
   [{'account': '1120', 'side': 'D', 'from': 'amount', 'party': True,
-    'party_type': 'CORPORATE', 'desc': 'ذمة شركة'},
+    'party_type': 'CORPORATE', 'desc': 'ذمة شركة — عدم حضور'},
+   {'account': '4102', 'side': 'C', 'from': 'net', 'desc': 'إيراد عدم الحضور'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ # إلغاء حجز مع غرامة
+ ('CANCEL_FEE', None, 'إلغاء حجز مع غرامة',
+  [{'account': '2110', 'side': 'D', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'خصم غرامة من العربون'},
+   {'account': '4102', 'side': 'C', 'from': 'net', 'desc': 'إيراد إلغاء'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ # #05 شحنات الفوليو حسب نوع الخدمة (السياق = كود الخدمة)
+ ('FOLIO_CHARGE', 'LAUNDRY', 'مغسلة على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة مغسلة'},
+   {'account': '4301', 'side': 'C', 'from': 'net', 'desc': 'إيراد مغسلة'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'SPA', 'سبا ونادي على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة سبا'},
+   {'account': '4302', 'side': 'C', 'from': 'net', 'desc': 'إيراد سبا'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'PARKING', 'مواقف على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة مواقف'},
+   {'account': '4303', 'side': 'C', 'from': 'net', 'desc': 'إيراد مواقف'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'ROOM_SERVICE', 'خدمة الغرف على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة خدمة غرفة'},
+   {'account': '4203', 'side': 'C', 'from': 'net', 'desc': 'إيراد خدمة الغرف'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'MINIBAR', 'ميني بار على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة ميني بار'},
+   {'account': '4201', 'side': 'C', 'from': 'net', 'desc': 'إيراد ميني بار'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'EXTRA_BED', 'سرير إضافي على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة سرير إضافي'},
+   {'account': '4101', 'side': 'C', 'from': 'net', 'desc': 'إيراد سرير إضافي'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ ('FOLIO_CHARGE', 'GENERIC', 'خدمة متنوعة على الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'شحنة متنوعة'},
+   {'account': '4901', 'side': 'C', 'from': 'net', 'desc': 'إيراد متنوع'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ # #06 خصم مسموح (يتطلب اعتماداً فوق حد الدور)
+ ('DISCOUNT', None, 'خصم مسموح على فوليو',
+  [{'account': '4190', 'side': 'D', 'from': 'amount',
+    'desc': 'خصم مسموح — معتمد'},
    {'account': '1110', 'side': 'C', 'from': 'amount', 'party': True,
-    'party_type': 'GUEST', 'desc': 'إقفال ذمة نزيل'}]),
+    'party_type': 'GUEST', 'desc': 'خفض ذمة نزيل'}]),
+ # #07 دفعات النزيل حسب الوسيلة
+ ('FOLIO_PAYMENT', 'CASH', 'دفعة نقدية من نزيل',
+  [{'account': '1101', 'side': 'D', 'from': 'amount', 'desc': 'نقدية صندوق'},
+   {'account': '1110', 'side': 'C', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'سداد ذمة نزيل'}]),
+ ('FOLIO_PAYMENT', 'CARD', 'دفعة بنكية/بطاقة من نزيل',
+  [{'account': '1103', 'side': 'D', 'from': 'amount', 'desc': 'تحصيل بنكي'},
+   {'account': '1110', 'side': 'C', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'سداد ذمة نزيل'}]),
+ ('FOLIO_PAYMENT', 'EWALLET', 'دفعة محفظة إلكترونية من نزيل',
+  [{'account': '1104', 'side': 'D', 'from': 'amount', 'desc': 'تحصيل محفظة'},
+   {'account': '1110', 'side': 'C', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'سداد ذمة نزيل'}]),
+ # مغادرة متأخرة (#4103)
+ ('LATE_CHECKOUT', None, 'رسوم مغادرة متأخرة',
+  [{'account': '1110', 'side': 'D', 'from': 'gross', 'party': True,
+    'party_type': 'GUEST', 'desc': 'رسوم مغادرة متأخرة'},
+   {'account': '4103', 'side': 'C', 'from': 'net', 'desc': 'إيراد مغادرة متأخرة'},
+   {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
+ # تطبيق العربون على الفوليو عند Check-in
+ ('DEPOSIT_APPLY', None, 'تطبيق عربون الحجز على فوليو النزيل',
+  [{'account': '2110', 'side': 'D', 'from': 'amount',
+    'party_key': 'reservation', 'desc': 'إنزال العربون'},
+   {'account': '1110', 'side': 'C', 'from': 'amount',
+    'party_key': 'folio', 'desc': 'تخفيض ذمة الفوليو'}]),
+ # رد العربون (إلغاء بدون غرامة)
+ ('DEPOSIT_REFUND', None, 'رد عربون حجز',
+  [{'account': '2110', 'side': 'D', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'إلغاء أمانة'},
+   {'account': '1101', 'side': 'C', 'from': 'amount', 'desc': 'رد نقدي'}]),
+ # رد فائض مدفوع عند إقفال الفوليو
+ ('GUEST_REFUND', None, 'رد فائض مدفوعات نزيل',
+  [{'account': '1110', 'side': 'D', 'from': 'amount', 'party': True,
+    'party_type': 'GUEST', 'desc': 'تصفية فائض'},
+   {'account': '1101', 'side': 'C', 'from': 'amount', 'desc': 'رد نقدي للنزيل'}]),
+ # تحويل شحنة بين نافذتي الفوليو (شخصي ↔ شركة) — نفس الحساب بطرفين
+ ('FOLIO_TRANSFER', None, 'تحويل شحنة بين نوافذ الفوليو',
+  [{'account': '1110', 'side': 'D', 'from': 'amount',
+    'party_key': 'to_window', 'desc': 'شحنة محولة لنافذة الشركة'},
+   {'account': '1110', 'side': 'C', 'from': 'amount',
+    'party_key': 'from_window', 'desc': 'إنزال شحنة من النافذة الشخصية'}]),
+]
+
+
+# أنواع غرف تجريبية (الأسعار تطابق سيناريو G1)
+HOTEL_ROOM_TYPES = [
+ ('SGL', 'غرفة مفردة', 'Single Room', 1, 1, 'سرير مفرد', 60, 1),
+ ('DBL', 'غرفة مزدوجة', 'Double Room', 2, 1, 'سريران', 85, 2),
+ ('SUITE', 'جناح', 'Suite', 3, 2, 'سرير كبير + صالة', 140, 3),
+]
+
+HOTEL_ROOMS = [  # (room_no, type, floor)
+ ('101', 'SGL', 1), ('103', 'SGL', 1), ('104', 'SGL', 1), ('105', 'SGL', 1),
+ ('102', 'DBL', 1), ('201', 'DBL', 2), ('202', 'DBL', 2), ('203', 'DBL', 2),
+ ('204', 'DBL', 2), ('301', 'SUITE', 3), ('302', 'SUITE', 3),
+]
+
+HOTEL_EXTRAS = [  # (code, name, price, revenue_account) — السياق = الكود
+ ('LAUNDRY', 'مغسلة', 8, '4301'), ('SPA', 'سبا ونادي', 25, '4302'),
+ ('PARKING', 'مواقف سيارات', 5, '4303'), ('ROOM_SERVICE', 'خدمة الغرف', 12, '4203'),
+ ('MINIBAR', 'ميني بار', 6, '4201'), ('EXTRA_BED', 'سرير إضافي', 15, '4101'),
+ ('GENERIC', 'خدمة متنوعة', 10, '4901'),
+]
+
+HOTEL_RATE_PLANS = [
+ ('BAR', 'إقامة فقط', None, False, 'إلغاء مجاني حتى 48 ساعة', 1),
+ ('BB', 'شامل إفطار', 10, True, 'إلغاء مجاني حتى 24 ساعة', 1),
 ]
 
 
@@ -226,6 +381,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                             description=desc, template=tpl,
                             effective_from=date(2020, 1, 1),
                             effective_to=None))
+    seed_hotel(db, tid, bid)
 
     # أدوار ومستخدم مدير
     role_ids = {}
@@ -246,3 +402,137 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
     db.commit()
     return {'seeded': True, 'tenant_id': tid, 'branch_id': bid,
             'admin_id': uid}
+
+
+# ════════════════════════════════════════════════════════════════════
+# زرع وحدة الفندق — يعمل إدخالاً ذرّياً ويرفع القواعد القديمة دون فقدان
+# ════════════════════════════════════════════════════════════════════
+def _map_exists(db: Session, tid: str, etype: str, ctx) -> bool:
+    q = select(m.PostingMap).where(m.PostingMap.tenant_id == tid,
+                                   m.PostingMap.event_type == etype)
+    if ctx is None:
+        q = q.where(m.PostingMap.context_key.is_(None))
+    else:
+        q = q.where(m.PostingMap.context_key == ctx)
+    return db.execute(q).first() is not None
+
+
+def seed_hotel(db: Session, tid: str, bid: str) -> dict:
+    """إدخالات idempotent: خرائط الفندق، غرف/أنواع/خدمات/خطط، تاريخ العمل."""
+    added = {'maps': 0, 'rooms': 0, 'extras': 0}
+    today = date.today()
+
+    # 1) خرائط الأحداث الفندقية
+    for etype, ctx, desc, tpl in HOTEL_POSTING_MAPS:
+        if not _map_exists(db, tid, etype, ctx):
+            db.add(m.PostingMap(id=new_uuid(), tenant_id=tid,
+                                event_type=etype, context_key=ctx,
+                                description=desc, template=tpl,
+                                effective_from=date(2020, 1, 1)))
+            added['maps'] += 1
+    db.flush()
+
+    # 2) أنواع الغرف والغرف
+    rt_ids = {}
+    for code, name_ar, name_en, ad, ch, beds, rate, order in HOTEL_ROOM_TYPES:
+        row = db.execute(
+            select(m.RoomType).where(m.RoomType.tenant_id == tid,
+                                     m.RoomType.code == code)).scalar_one_or_none()
+        if not row:
+            row = m.RoomType(id=new_uuid(), tenant_id=tid, code=code,
+                             name_ar=name_ar, name_en=name_en,
+                             capacity_adults=ad, capacity_children=ch,
+                             beds=beds, base_rate=rate, display_order=order)
+            db.add(row)
+            db.flush()
+        rt_ids[code] = row.id
+
+    for room_no, tcode, floor in HOTEL_ROOMS:
+        exists = db.execute(
+            select(m.Room).where(m.Room.tenant_id == tid,
+                                 m.Room.branch_id == bid,
+                                 m.Room.room_no == room_no)).scalar_one_or_none()
+        if not exists:
+            db.add(m.Room(id=new_uuid(), tenant_id=tid, branch_id=bid,
+                          room_no=room_no, floor=floor,
+                          room_type_id=rt_ids[tcode], hk_status='CLEAN'))
+            added['rooms'] += 1
+    db.flush()
+
+    # 3) الخدمات الإضافية
+    for code, name, price, acct in HOTEL_EXTRAS:
+        if not db.execute(select(m.Extra).where(
+                m.Extra.tenant_id == tid, m.Extra.code == code)).first():
+            db.add(m.Extra(id=new_uuid(), tenant_id=tid, code=code,
+                           name_ar=name, price=price,
+                           revenue_account_code=acct))
+            added['extras'] += 1
+    db.flush()
+
+    # 4) خطط الأسعار
+    for code, name, ref, bf, cancel, minn in HOTEL_RATE_PLANS:
+        if not db.execute(select(m.RatePlan).where(
+                m.RatePlan.tenant_id == tid, m.RatePlan.code == code)).first():
+            db.add(m.RatePlan(id=new_uuid(), tenant_id=tid, code=code,
+                              name_ar=name, ref_rate=ref,
+                              includes_breakfast=bf, cancel_policy=cancel,
+                              min_nights=minn))
+    db.flush()
+
+    # 5) تاريخ العمل الفندقي — مرة واحدة فقط عند أول زرع
+    if not db.get(m.BusinessDateState, tid):
+        from .security import utcnow as _un
+        db.add(m.BusinessDateState(tenant_id=tid,
+                                   current_business_date=today,
+                                   updated_at=_un()))
+    db.flush()
+    return added
+
+
+def ensure_hotel_upgrade(db: Session) -> dict:
+    """يرفع قاعدة قائمة (تحوي حسابات) بكيانات الفندق دون فقدان أي بيانات."""
+    tenant = db.execute(select(m.Tenant).limit(1)).scalar_one_or_none()
+    if tenant is None:
+        return {'upgraded': False, 'reason': 'empty-db'}
+    branch = db.execute(
+        select(m.Branch).where(m.Branch.tenant_id == tenant.id)
+        .limit(1)).scalar_one_or_none()
+    if branch is None:
+        return {'upgraded': False, 'reason': 'no-branch'}
+
+    out = {'upgraded': True, 'maps': 0, 'rooms': 0, 'extras': 0,
+           'roles_updated': []}
+
+    # خرائط الربط الناقصة (من القائمتين العامة والفندقية)
+    base_maps = [(e, None, d, t) for e, d, t in POSTING_MAPS]
+    for etype, ctx, desc, tpl in base_maps + HOTEL_POSTING_MAPS:
+        if not _map_exists(db, tenant.id, etype, ctx):
+            db.add(m.PostingMap(id=new_uuid(), tenant_id=tenant.id,
+                                event_type=etype, context_key=ctx,
+                                description=desc, template=tpl,
+                                effective_from=date(2020, 1, 1)))
+            out['maps'] += 1
+    db.flush()
+
+    # أدوار: أضف الناقص، وادمج الصلاحيات الجديدة في القديم (اتحاداً)
+    for code, name, desc, perms in ROLES:
+        role = db.execute(
+            select(m.Role).where(m.Role.tenant_id == tenant.id,
+                                 m.Role.code == code)).scalar_one_or_none()
+        if role is None:
+            db.add(m.Role(id=new_uuid(), tenant_id=tenant.id, code=code,
+                          name=name, description=desc, permissions=perms))
+            out['roles_updated'].append(f'added:{code}')
+        else:
+            merged = sorted(set(role.permissions or []) | set(perms))
+            if merged != sorted(role.permissions or []):
+                role.permissions = merged
+                out['roles_updated'].append(f'merged:{code}')
+    db.flush()
+
+    added = seed_hotel(db, tenant.id, branch.id)
+    out['maps'] += added['maps']
+    out['rooms'] = added['rooms']
+    out['extras'] = added['extras']
+    db.commit()
+    return out

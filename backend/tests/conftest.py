@@ -25,7 +25,9 @@ ADMIN = {'username': 'admin', 'password': 'admin123!Change'}
 def db_session(tmp_path):
     """قاعدة ملفية مستقلة لكل اختبار مزروعة بالدليل والخريطة والمستخدم."""
     url = f'sqlite:///{tmp_path}/test.db'
-    engine = create_engine(url, connect_args={'check_same_thread': False})
+    # timeout مرتفع: اختبارات التزامن تحتاج انتظار القفل لا فشلو الفوري
+    engine = create_engine(url, connect_args={'check_same_thread': False,
+                                              'timeout': 15})
 
     @event.listens_for(engine, 'connect')
     def _fk(conn, _):

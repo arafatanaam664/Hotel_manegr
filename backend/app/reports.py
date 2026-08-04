@@ -197,7 +197,8 @@ def run_g1_month_scenario(db: Session, *, tenant_id: str, year: int,
                        event_key=f'g1:city:{year}{month:02d}:{d}',
                        entry_date=dt, actor_id=actor_id,
                        amounts={'amount': str(D(85) * 25)},
-                       party_type='CORPORATE', party_id='corp-101',
+                       parties={'corporate': ('CORPORATE', 'corp-101'),
+                                'folio': ('GUEST', 'guest-102')},
                        narration='نقل ذمة الغرفة 102 لشركة النخبة')
         tb = trial_balance(db, tenant_id, dt)
         if not tb['balanced'] or not tb['net_balance_zero']:

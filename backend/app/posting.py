@@ -186,8 +186,14 @@ def _amount(payload_amounts: dict, key: str) -> Decimal:
 def post_event(db: Session, *, tenant_id: str, branch_code: str,
                event_type: str, event_key: str, entry_date: date,
                amounts: dict, narration: str = '', party_type=None,
-               party_id=None, actor_id: str | None = None,
+               party_id=None, parties: dict | None = None,
+               actor_id: str | None = None,
                context_key: str | None = None) -> m.JournalEntry:
+    """نقطة دخول الأحداث التشغيلية (ملف 02 §6): خريطة ← تحقق ← ترحيل.
+    سطر القالب:
+      - 'party': True          → يأخذ الطرف العام (party_type/party_id)
+      - 'party_key': 'folio'   → يأخذ (type,id) من parties['folio'] — للأحداث
+                                 متعددة الأطراف (تطبيق عربون/نقل ذمم/تحويل نوافذ)"""
     """نقطة دخول الأحداث التشغيلية (ملف 02 §6): خريطة ← تحقق ← ترحيل."""
     branch = db.execute(
         select(m.Branch).where(m.Branch.tenant_id == tenant_id,
@@ -211,6 +217,7 @@ def post_event(db: Session, *, tenant_id: str, branch_code: str,
                            f'لا خريطة ربط فعالة للحدث {event_type}')
 
     raw_lines = []
+    parties = parties or {}
     for t in pmap.template:
         amt = _amount(amounts, t['from'])
         if amt == 0:
@@ -222,6 +229,13 @@ def post_event(db: Session, *, tenant_id: str, branch_code: str,
         if t.get('party'):
             line['party_type'] = party_type or t.get('party_type')
             line['party_id'] = party_id
+        elif t.get('party_key'):
+            ptype, pid = parties.get(t['party_key'], (None, None))
+            if not pid:
+                raise PostingError(
+                    'ACCOUNTING.PARTY_MISSING',
+                    f'القالب يتطلب طرفاً «{t["party_key"]}» غير ممرَّر للحدث {event_type}')
+            line['party_type'], line['party_id'] = ptype, pid
         raw_lines.append(line)
 
     try:

@@ -351,3 +351,285 @@ class SequenceCounter(Base):
 
     __table_args__ = (UniqueConstraint('tenant_id', 'kind', 'year',
                                        name='uq_seq'),)
+
+
+# ════════════════════════════════════════════════════════════════════
+# وحدة الفندق — ملف 03 §1 (الكيانات) وملف 11
+# ════════════════════════════════════════════════════════════════════
+
+class RoomType(Base):
+    __tablename__ = 'room_types'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(16))
+    name_ar: Mapped[str] = mapped_column(String(80))
+    name_en: Mapped[str] = mapped_column(String(80), default='')
+    capacity_adults: Mapped[int] = mapped_column(Integer, default=2)
+    capacity_children: Mapped[int] = mapped_column(Integer, default=1)
+    beds: Mapped[str] = mapped_column(String(60), default='')
+    amenities: Mapped[list] = mapped_column(JSONType, default=list)
+    base_rate: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code', name='uq_rtype'),)
+
+
+class Room(Base):
+    """hk_status: CLEAN|INSPECTED|DIRTY|CLEANING|OOO|OOS (ملف 03 §5).
+    الإشغال (FO) مشتق من الإقامات — لا يخزَّن منعاً للتناقض."""
+    __tablename__ = 'rooms'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(ForeignKey('branches.id'),
+                                           index=True)
+    room_no: Mapped[str] = mapped_column(String(10))
+    floor: Mapped[int] = mapped_column(Integer, default=1)
+    room_type_id: Mapped[str] = mapped_column(ForeignKey('room_types.id'))
+    features: Mapped[list] = mapped_column(JSONType, default=list)
+    hk_status: Mapped[str] = mapped_column(String(12), default='CLEAN',
+                                           index=True)
+    ooo_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    ooo_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ooo_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(String(300), default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)  # قفل تنافسي
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'branch_id', 'room_no',
+                                       name='uq_room'),)
+
+
+class RatePlan(Base):
+    __tablename__ = 'rate_plans'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(16))
+    name_ar: Mapped[str] = mapped_column(String(80))
+    ref_rate: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                     nullable=True)
+    includes_breakfast: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancel_policy: Mapped[str] = mapped_column(String(300), default='مرن')
+    min_nights: Mapped[int] = mapped_column(Integer, default=1)
+    for_corporate: Mapped[bool] = mapped_column(Boolean, default=False)
+    tax_inclusive: Mapped[bool] = mapped_column(Boolean, default=False)
+    meals_included: Mapped[list] = mapped_column(JSONType, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code', name='uq_rplan'),)
+
+
+class RateCalendar(Base):
+    __tablename__ = 'rate_calendar'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    room_type_id: Mapped[str] = mapped_column(ForeignKey('room_types.id'))
+    rate_plan_id: Mapped[str | None] = mapped_column(
+        ForeignKey('rate_plans.id'), nullable=True)   # None = السعر الافتراضي
+    day: Mapped[date] = mapped_column(Date)
+    price: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    day_type: Mapped[str] = mapped_column(String(12), default='NORMAL')
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'room_type_id',
+                                       'rate_plan_id', 'day', name='uq_rcal'),)
+
+
+class Extra(Base):
+    """خدمة إضافية قابلة للتحميل على الفوليو (ملف 03 §1.5) — حساب إيرادها من خريطة الربط."""
+    __tablename__ = 'extras'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name_ar: Mapped[str] = mapped_column(String(80))
+    price: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    revenue_account_code: Mapped[str] = mapped_column(String(10))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code', name='uq_extra'),)
+
+
+class Guest(Base):
+    """هوية النزيل مشفرة ساكناً (ملف 10 §Data — لا تخزَّن صريحة أبداً)."""
+    __tablename__ = 'guests'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    full_name: Mapped[str] = mapped_column(String(120))
+    phone: Mapped[str] = mapped_column(String(30), default='')
+    id_number_enc: Mapped[str] = mapped_column(Text, default='')
+    nationality: Mapped[str] = mapped_column(String(50), default='')
+    vip: Mapped[bool] = mapped_column(Boolean, default=False)
+    blacklist: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str] = mapped_column(String(300), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Corporate(Base):
+    __tablename__ = 'corporates'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    contact_person: Mapped[str] = mapped_column(String(80), default='')
+    phone: Mapped[str] = mapped_column(String(30), default='')
+    email: Mapped[str] = mapped_column(String(120), default='')
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                         nullable=True)
+    discount_pct: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=0)
+    settlement_period: Mapped[str] = mapped_column(String(12),
+                                                   default='MONTHLY')
+    billing_tax_note: Mapped[str] = mapped_column(String(200), default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Reservation(Base):
+    """State Machine (ملف 03 §2): TENTATIVE→CONFIRMED→CHECKED_IN→CHECKED_OUT
+    أفرع نهائية: CANCELLED | NO_SHOW — مراكز التحويل تفرضها الخدمة فقط."""
+    __tablename__ = 'reservations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(ForeignKey('branches.id'),
+                                           index=True)
+    confirmation_no: Mapped[str] = mapped_column(String(24))
+    guest_id: Mapped[str] = mapped_column(ForeignKey('guests.id'), index=True)
+    corporate_id: Mapped[str | None] = mapped_column(
+        ForeignKey('corporates.id'), nullable=True)
+    room_type_id: Mapped[str] = mapped_column(ForeignKey('room_types.id'))
+    room_id: Mapped[str | None] = mapped_column(ForeignKey('rooms.id'),
+                                                nullable=True)
+    rate_plan_id: Mapped[str | None] = mapped_column(
+        ForeignKey('rate_plans.id'), nullable=True)
+    arrival_date: Mapped[date] = mapped_column(Date, index=True)
+    departure_date: Mapped[date] = mapped_column(Date, index=True)
+    nights: Mapped[int] = mapped_column(Integer)
+    adults: Mapped[int] = mapped_column(Integer, default=1)
+    children: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(14), default='TENTATIVE',
+                                        index=True)
+    source: Mapped[str] = mapped_column(String(12), default='DIRECT')
+    agreed_rate: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    est_total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    cancel_reason: Mapped[str | None] = mapped_column(String(300),
+                                                      nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    checked_in_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    checked_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)  # قفل تفاؤلي
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'confirmation_no',
+                                       name='uq_rsv'),
+                      Index('ix_rsv_room_dates', 'tenant_id', 'room_id',
+                            'arrival_date', 'departure_date'),)
+
+    # منع إقصائي زمني مطلق للحجز المزدوج (Postgres في الإنتاج):
+    # انظر sql/postgres_hardening.sql — قيد exclusion على daterange.
+
+
+class ReservationNightRate(Base):
+    """Snapshot لسعر كل ليلة (ملف 03 §2: الليالي المنقضية بسعرها القديم)."""
+    __tablename__ = 'reservation_night_rates'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey('reservations.id'), index=True)
+    stay_date: Mapped[date] = mapped_column(Date)
+    room_id: Mapped[str | None] = mapped_column(ForeignKey('rooms.id'),
+                                                nullable=True)
+    rate: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    rate_origin: Mapped[str] = mapped_column(String(12), default='BASE')
+
+    __table_args__ = (UniqueConstraint('reservation_id', 'stay_date',
+                                       name='uq_nightrate'),)
+
+
+class ReservationStay(Base):
+    """شرائح الإقامة الفعلية — يدعم نقل النزيل بين الغرف بنفس الفوليو (§2)."""
+    __tablename__ = 'reservation_stays'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey('reservations.id'), index=True)
+    room_id: Mapped[str] = mapped_column(ForeignKey('rooms.id'))
+    from_date: Mapped[date] = mapped_column(Date)
+    to_date: Mapped[date] = mapped_column(Date)
+    seq: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class Folio(Base):
+    """فاتورة نزيل داخل الفندق — بلا عمود رصيد: الرصيد يُشتق لحظياً من دفتر
+    1110/1120 بمطابقة الطرف (معيار القبول #2 في ملف 03)."""
+    __tablename__ = 'folios'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(String(36), index=True)
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey('reservations.id'), index=True)
+    window: Mapped[int] = mapped_column(Integer, default=1)
+    type: Mapped[str] = mapped_column(String(10), default='GUEST')
+    corporate_id: Mapped[str | None] = mapped_column(
+        ForeignKey('corporates.id'), nullable=True)
+    status: Mapped[str] = mapped_column(String(8), default='OPEN', index=True)
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                         nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    closed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (UniqueConstraint('reservation_id', 'window',
+                                       name='uq_folio_window'),)
+
+
+class NightAuditRun(Base):
+    __tablename__ = 'night_audit_runs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    business_date: Mapped[date] = mapped_column(Date, index=True)
+    status: Mapped[str] = mapped_column(String(10), default='COMPLETED')
+    steps: Mapped[list] = mapped_column(JSONType, default=list)
+    totals: Mapped[dict] = mapped_column(JSONType, default=dict)
+    report_snapshot: Mapped[dict] = mapped_column(JSONType, default=dict)
+    started_by: Mapped[str] = mapped_column(String(36))
+    completed_by: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+
+class BusinessDateState(Base):
+    """تاريخ العمل الفندقي — يتقدم فقط بإتمام التدقيق الليلي (ملف 03 §4)."""
+    __tablename__ = 'business_date_state'
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    current_business_date: Mapped[date] = mapped_column(Date)
+    last_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class GuestInvoice(Base):
+    """الفاتورة الضريبية النهائية عند Check-out — غير قابلة للتعديل بتاتاً
+    (إعادة الفتح ممنوعة؛ التصحيح بإشعار دائن + قيد عكسي — ملف 03 §3.3)."""
+    __tablename__ = 'guest_invoices'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(String(36), index=True)
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey('reservations.id'))
+    folio_id: Mapped[str] = mapped_column(String(36))
+    invoice_no: Mapped[str] = mapped_column(String(24))
+    guest_name: Mapped[str] = mapped_column(String(120))
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    issued_by: Mapped[str] = mapped_column(String(36))
+    lines: Mapped[list] = mapped_column(JSONType, default=list)
+    total_charges: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    total_payments: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    balance_settled: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                     default=0)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'invoice_no',
+                                       name='uq_invoice'),)

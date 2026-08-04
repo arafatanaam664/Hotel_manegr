@@ -52,6 +52,9 @@ def audit(db: Session, *, tenant_id: str, actor_id: str | None,
           entity_id: str | None = None, before: dict | None = None,
           after: dict | None = None, business_date=None,
           ip: str | None = None) -> m.AuditLog:
+    """يسلسل التدقيق بعد flush إجباري: بدونه تَظهر نقاط سلسلة متوازية عند
+    عمليات متعددة الأحداث داخل معاملة واحدة (autoflush معطّل عمداً)."""
+    db.flush()  # إظهار صفوف التدقيق المعلقة قبل حساب prev_hash
     at = utcnow()
     prev = _last_hash(db, tenant_id)
     rh = canonical_hash(tenant_id=tenant_id, at=at, actor=actor_id,

@@ -66,12 +66,13 @@ def create_app() -> FastAPI:
                                'errors': exc.errors()}})
 
     # ── الموجِّهات ─────────────────────────────────────
-    from .api import accounting, auth, health, org, reports
+    from .api import accounting, auth, health, hotel, org, reports
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
     app.include_router(accounting.router)
     app.include_router(reports.router)
+    app.include_router(hotel.router)
 
     # ── الإقلاع: جداول + زرع ─────────────────────────────
     @app.on_event('startup')
@@ -80,10 +81,12 @@ def create_app() -> FastAPI:
         if s.seed_on_startup:
             db = SessionLocal()
             try:
-                from .seed import seed_if_empty
-                seed_if_empty(db, tenant_name=s.demo_tenant_name,
-                              admin_username=s.admin_username,
-                              admin_password=s.admin_password)
+                from .seed import ensure_hotel_upgrade, seed_if_empty
+                if not seed_if_empty(db, tenant_name=s.demo_tenant_name,
+                                     admin_username=s.admin_username,
+                                     admin_password=s.admin_password)['seeded']:
+                    # قاعدة قائمة ← ترقية بدون فقدان (خرائط/غرف/أدوار الفندق)
+                    ensure_hotel_upgrade(db)
             finally:
                 db.close()
 

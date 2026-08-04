@@ -10,6 +10,11 @@ import JournalDetail from './pages/JournalDetail'
 import TrialBalance from './pages/TrialBalance'
 import Ledger from './pages/Ledger'
 import Audit from './pages/Audit'
+import FrontDesk from './pages/FrontDesk'
+import Reservations from './pages/Reservations'
+import ReservationDetail from './pages/ReservationDetail'
+import NightAudit from './pages/NightAudit'
+import Guests from './pages/Guests'
 
 export default function App() {
   const { session } = useAuth()
@@ -25,6 +30,11 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
+        <Route path="front-desk" element={<FrontDesk />} />
+        <Route path="reservations" element={<Reservations />} />
+        <Route path="reservations/:id" element={<ReservationDetail />} />
+        <Route path="guests" element={<Guests />} />
+        <Route path="night-audit" element={<NightAudit />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
         <Route path="journals/new" element={<JournalNew />} />

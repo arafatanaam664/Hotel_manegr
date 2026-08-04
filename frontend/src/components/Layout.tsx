@@ -4,6 +4,10 @@ import { useAuth } from '../auth'
 
 const NAV = [
   { to: '/', label: 'لوحة القيادة', icon: '◈', end: true },
+  { to: '/front-desk', label: 'مكتب الاستقبال', icon: '🛎', perm: 'frontdesk.view' },
+  { to: '/reservations', label: 'الحجوزات', icon: '📅', perm: 'reservations.view' },
+  { to: '/guests', label: 'النزلاء والشركات', icon: '👤', perm: 'guests.view' },
+  { to: '/night-audit', label: 'التدقيق الليلي', icon: '🌙', perm: 'frontdesk.view' },
   { to: '/accounts', label: 'دليل الحسابات', icon: '☷', perm: 'accounts.view' },
   { to: '/journals', label: 'القيود اليومية', icon: '✎', perm: 'journals.view' },
   { to: '/journals/new', label: 'قيد يدوي جديد', icon: '＋', perm: 'journals.manual' },
