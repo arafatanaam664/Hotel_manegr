@@ -1,0 +1,105 @@
+================================================================================
+12 — عقد الـ API (API Structure & Contract)
+نظام أثير لإدارة الفنادق | الإصدار 1.0 | 2026-08-04
+النمط: REST/JSON إصدار /api/v1 | OpenAPI 3.1 يُولَّد من الكود | كله HTTPS
+================================================================================
+
+================================================================================
+القسم 1 — الاتفاقيات العامة
+================================================================================
+- التوثيق: Authorization: Bearer <JWT> (15 د) + Refresh بالدوران.
+- التعريف: tenant من الـ JWT (لا يقبل tenant_id من العميل إطلاقاً)، الفرع
+  من JWT أو ترويسة X-Branch-Id مع التحقق من نطاق المستخدم.
+- الترويسات: X-Request-Id (يُرجع ويُسجل)، Idempotency-Key إلزامي لكل POST
+  مالي/مستندي (يمنع ازدواج الإرسال عبر الشبكات الضعيفة — انظر jobs).
+- الترقيم: cursor-based (?cursor=&limit≤200) — لا offset للجداول الكبيرة.
+- الزمن: كل الطوابع RFC 3339 UTC؛ التواريخ التجارية business_date صريحة.
+- الأخطاء: مظروف موحد:
+  { "error": { "code": "ACCOUNTING.UNBALANCED_ENTRY", "message_ar": "...",
+    "message_en": "...", "details": {...}, "trace_id": "..." } }
+  رموز النطاقات: AUTH.*, RBAC.*, VALIDATION.*, ACCOUNTING.*, HOTEL.*,
+  POS.*, INV.*, PAYROLL.*, LICENSE.*, SYNC.* — موثقة بجدول أكواد قابل للبحث.
+- الإصدارات: /api/v1 ثابت لعقدة؛ التغيير الكاسر = /api/v2 بجانبه (لا كسر
+  لعميل قديم أبداً داخل المنتج).
+
+================================================================================
+القسم 2 — خريطة المسارات (الرئيسية، غير شامل)
+================================================================================
+المصادقة:
+  POST /api/v1/auth/login          {username,password,totp?}
+  POST /api/v1/auth/refresh        (rotation + reuse detection)
+  POST /api/v1/auth/logout         POST /api/v1/auth/mfa/enroll|verify
+  GET  /api/v1/auth/sessions       DELETE /api/v1/auth/sessions/{id}
+
+الحسابات والقيود (قراءة عامة، كتابة مقيدة):
+  GET  /api/v1/accounts?filter=    POST /api/v1/accounts (صلاحية coa.manage)
+  GET  /api/v1/journal-entries?period=&type=&source=
+  GET  /api/v1/journal-entries/{id}  (مع الأسطر + زر «لماذا وُلد؟» للمصدر)
+  POST /api/v1/journal-entries/manual        (DRAFT — صلاحية + سبب)
+  POST /api/v1/journal-entries/{id}/post
+  POST /api/v1/journal-entries/{id}/reverse  {reason} (صلاحية reverse)
+  GET  /api/v1/reports/trial-balance?to=     /income-statement  /balance-sheet
+  GET  /api/v1/reports/ledger/{accountId}    /cash-flow  /ar-aging  /ap-aging
+  الفترات: GET/POST /api/v1/fiscal-periods/{id}/close|soft-close|reopen(مزدوج)
+  الضرائب: GET /api/v1/reports/tax?from=&to=
+
+الفندق:
+  GET/POST /api/v1/rooms  /room-types  /rate-plans  PUT بعد Idempotency
+  GET  /api/v1/availability?from=&to=&type=   (من التقويم لا من الإنشغال اليدوي)
+  POST /api/v1/reservations              GET /api/v1/reservations?status=&date=
+  POST /api/v1/reservations/{id}/confirm   {deposit?}
+  POST /api/v1/reservations/{id}/check-in  (ذرية — ملف 03 §3.1)
+  POST /api/v1/reservations/{id}/check-out (تصفية الفوليو شرط)
+  POST /api/v1/reservations/{id}/cancel    /no-show  /move  /extend
+  GET  /api/v1/folios/{id}   POST /api/v1/folios/{id}/charges|payments
+  POST /api/v1/folios/{id}/transfer-charge {to_folio}
+  POST /api/v1/night-audit/run   (ذري — GET /api/v1/night-audit/precheck أولاً)
+  GET  /api/v1/housekeeping/board  POST /api/v1/rooms/{id}/hk-status
+
+POS:
+  GET  /api/v1/pos/catalog?outlet=     POST /api/v1/pos/orders  (فتح)
+  POST /api/v1/pos/orders/{id}/lines   /fire  /void-line {reason}
+  POST /api/v1/pos/orders/{id}/settle  [{method,amount...}] (Idempotency إلزامي)
+  POST /api/v1/pos/orders/{id}/charge-to-room {folio_id}
+  POST /api/v1/pos/shifts/open|close   GET /api/v1/pos/shifts/{id}/z-report
+
+المخزون/المشتريات:
+  CRUD /api/v1/inv/items  /warehouses  /suppliers
+  POST /api/v1/purchasing/pos/{id}/approve  GRN: POST /api/v1/grn (مع lines)
+  POST /api/v1/inventory/transfer  /adjust(مزدوج الاعتماد)  /counts/{id}/post
+  GET  /api/v1/inventory/ledger?item=&wh=   /api/v1/inventory/stock-report
+
+الرواتب:
+  CRUD /api/v1/hr/employees (الحقول الحساسة بصلاحية مستقلة)
+  POST /api/v1/payroll/runs  /{id}/review  /{id}/approve  /{id}/post  /{id}/pay
+  GET  /api/v1/payroll/runs/{id}/payslips  /api/v1/hr/advances  /attendance
+
+الترخيص/المزامنة (Client Edge — مصادقة شهادة الموقع + توكن):
+  POST /edge/v1/license/heartbeat   {license_id, site_seq_hint} ← يستلم: حالة
+        الترخيص + revocation_seq + ترخيص مجدد إن صدر + oracles (أعلام ميزات)
+  POST /edge/v1/sync/push  (batches seq مترابطة)   POST /edge/v1/sync/pull
+  GET  /edge/v1/sync/status         POST /edge/v1/support/tickets (من التطبيق)
+  GET  /edge/v1/updates/manifest    + تنزيل موقَّع الحزم
+
+Vendor Panel (نطاق منفصل، MFA إلزامي، لا يشارك JWT العملاء):
+  CRUD /v1/customers  /v1/subscriptions  /v1/invoices  /v1/payments
+  POST /v1/licenses/issue|renew|revoke   GET /v1/licenses/health
+  CRUD /v1/tickets(+escalate)  GET /v1/metrics/mrr|arr|churn|aging
+  GET  /v1/fleet/health (نبض المواقع)  POST /v1/updates/release (Canary)
+
+================================================================================
+القسم 3 — Webhooks (سحابي فقط، مرحلة 2)
+================================================================================
+اشتراك العميل: invoice.posted, payment.received, period.closed —
+تسليم موقَّع HMAC بإعادة محاولة أسّية؛ بوابة سجلات التسليم.
+
+================================================================================
+القسم 4 — معايير القبول
+================================================================================
+1) كل مسار في OpenAPI المولَّد له: مخطط طلب/رد، أكواد أخطاء، صلاحية مطلوبة.
+2) 100% من المسارات الكاتبة خلف: تحقق مخطط + RBAC + Idempotency حيث يلزم.
+3) لا مسار يقبل tenant_id من العميل — اختبار سلبي آلي لكل مسار.
+4) عقود اختبار (Contract Tests) بين الواجهة والـ API تعمل بالـ CI.
+
+سجل التغييرات: v1.0 (2026-08-04)
+================================================================================
