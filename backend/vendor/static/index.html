@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة أثير — الشركة</title>
+<style>
+  :root{--navy:#0d1b2e;--gold:#d4af37;--bg:#f3f5f9;--ok:#1a7a3c;--warn:#b8860b;--bad:#c0392b}
+  *{box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+  body{margin:0;background:var(--bg);color:#222}
+  header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+  header .brand{font-weight:800;font-size:20px;color:var(--gold)}
+  header .sub{font-size:11px;opacity:.65}
+  nav{background:#16294a;display:flex;gap:2px;padding:0 12px;flex-wrap:wrap}
+  nav button{background:none;border:none;color:#cfd8ea;padding:12px 16px;cursor:pointer;font-size:14px}
+  nav button.on{color:#fff;font-weight:700;border-bottom:3px solid var(--gold)}
+  main{padding:18px;max-width:1150px;margin:auto}
+  .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .stat{flex:1;min-width:140px;background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .stat .v{font-size:22px;font-weight:800;color:var(--navy)}
+  .stat .k{font-size:12px;color:#777}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px;text-align:right;border-bottom:1px solid #eee}
+  th{background:#fafafc;color:#666;font-weight:600}
+  .pill{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-block}
+  .GREEN{background:#eaf7ee;color:var(--ok)}.YELLOW{background:#fdf3d8;color:var(--warn)}
+  .RED,.bad{background:#fdecea;color:var(--bad)}.DARK{background:#eee;color:#666}
+  .ACTIVE{background:#eaf7ee;color:var(--ok)}.TRIAL{background:#fdf3d8;color:var(--warn)}
+  .GRACE{background:#fdf3d8;color:var(--warn)}.READ_ONLY,.SUSPENDED,.TERMINATED{background:#fdecea;color:var(--bad)}
+  .PENDING_APPROVAL{background:#fdf3d8;color:var(--warn)}
+  input,select,textarea{padding:8px;border:1px solid #ccc;border-radius:8px;font-size:13px}
+  button.act{background:var(--navy);color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;margin:2px}
+  button.act.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+  button.act:disabled{opacity:.5}
+  .err{background:#fdecea;color:var(--bad);padding:10px;border-radius:8px;margin:8px 0;font-size:13px}
+  .okm{background:#eaf7ee;color:var(--ok);padding:10px;border-radius:8px;margin:8px 0;font-size:13px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  h3{margin:0 0 12px;font-size:15px}
+  label{font-size:12px;color:#666;display:block;margin:6px 0 2px}
+  #login{max-width:380px;margin:8vh auto}
+  .hidden{display:none}
+  .mono{direction:ltr;font-family:monospace;font-size:11px}
+  details summary{cursor:pointer;color:var(--navy);font-weight:600;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div><span class="brand">أثـيــر</span> <span class="sub">لوحة تحكم الشركة المالكة — مستقلة (ملف 08)</span></div>
+  <div id="who"></div>
+</header>
+<nav id="nav" class="hidden">
+  <button data-t="revenue" class="on">📈 الإيراد</button>
+  <button data-t="clients">🏨 العملاء</button>
+  <button data-t="licenses">🔑 التراخيص</button>
+  <button data-t="tickets">🛠 التذاكر</button>
+  <button data-t="health">💓 صحة الأسطول</button>
+  <button data-t="notes">🔔 التنبيهات</button>
+  <button data-t="audit">🛡 التدقيق</button>
+</nav>
+<main>
+  <div id="err"></div><div id="okm"></div>
+
+  <!-- دخول + تسجيل MFA الإجباري -->
+  <div id="login" class="card">
+    <h3>دخول فريق الشركة — MFA إلزامي</h3>
+    <label>اسم المستخدم</label><input id="lu" style="width:100%">
+    <label>كلمة المرور</label><input id="lp" type="password" style="width:100%">
+    <div id="mfaBox" class="hidden">
+      <div id="enrollInfo"></div>
+      <label>رمز التحقق الثنائي</label><input id="lc" inputmode="numeric" style="width:100%">
+    </div>
+    <button class="act" style="margin-top:12px;width:100%" id="lb">دخول</button>
+  </div>
+
+  <div id="app" class="hidden">
+    <section id="t-revenue"></section>
+    <section id="t-clients" class="hidden"></section>
+    <section id="t-licenses" class="hidden"></section>
+    <section id="t-tickets" class="hidden"></section>
+    <section id="t-health" class="hidden"></section>
+    <section id="t-notes" class="hidden"></section>
+    <section id="t-audit" class="hidden"></section>
+  </div>
+</main>
+<script>
+let TOK = localStorage.getItem('vendor.tok') || '';
+let ENROLL = null;
+const $ = (s) => document.querySelector(s);
+const esc = (x) => String(x ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function err(m){ $('#err').innerHTML = m ? `<div class="err">${esc(m)}</div>` : ''; }
+function okm(m){ $('#okm').innerHTML = m ? `<div class="okm">${esc(m)}</div>` : ''; }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: {
+    'Content-Type':'application/json', Authorization:`Bearer ${TOK}`,
+    ...(opts.headers||{}) }});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j?.error?.message_ar || `HTTP ${r.status}`);
+               e.code = j?.error?.code; throw e; }
+  return j;
+}
+const post = (p, b) => api(p, { method:'POST', body: JSON.stringify(b ?? {}) });
+
+async function doLogin() {
+  err('');
+  const body = { username: $('#lu').value.trim(), password: $('#lp').value };
+  if (ENROLL) {
+    try {
+      const j = await post('/api/v1/auth/mfa/confirm',
+        { enroll_token: ENROLL.enroll_token, totp_code: $('#lc').value.trim() });
+      TOK = j.access_token; localStorage.setItem('vendor.tok', TOK);
+      return boot(j.user);
+    } catch (e) { return err(`${e.code||''} ${e.message}`); }
+  }
+  if ($('#lc').value.trim()) body.totp_code = $('#lc').value.trim();
+  try {
+    const j = await post('/api/v1/auth/login', body);
+    if (j.mfa_required) {         // تسجيل إجباري أول مرة (§7)
+      ENROLL = j; $('#mfaBox').classList.remove('hidden');
+      $('#enrollInfo').innerHTML = `<div class="okm">سجّل هذا السر في تطبيق المصادقة
+        (مرة واحدة): <b class="mono">${esc(j.totp_secret)}</b><br>
+        <span class="mono">${esc(j.otpauth)}</span></div>`;
+      return;
+    }
+    TOK = j.access_token; localStorage.setItem('vendor.tok', TOK);
+    boot(j.user);
+  } catch (e) {
+    if (e.code === 'VND.MFA_REQUIRED') { $('#mfaBox').classList.remove('hidden');
+      $('#enrollInfo').innerHTML = '<div class="okm">أدخل رمز تطبيق المصادقة</div>'; }
+    else err(`${e.code||''} ${e.message}`);
+  }
+}
+$('#lb').onclick = doLogin;
+
+function boot(user) {
+  $('#login').classList.add('hidden'); $('#nav').classList.remove('hidden');
+  $('#app').classList.remove('hidden');
+  $('#who').innerHTML = user ? `${esc(user.full_name)} — ${esc(user.role_ar||user.role)}
+    <button class="act alt" onclick="localStorage.removeItem('vendor.tok');location.reload()">خروج</button>` : '';
+  show('revenue');
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.t));
+function show(t) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+  $('#t-'+t).classList.remove('hidden');
+  ({ revenue: rRevenue, clients: rClients, licenses: rLicenses, tickets: rTickets,
+     health: rHealth, notes: rNotes, audit: rAudit })[t]().catch(e => err(`${e.code||''} ${e.message}`));
+}
+const pill = (s) => `<span class="pill ${esc(s)}">${esc(s)}</span>`;
+const STATE_AR = {TRIAL:'تجريبي',ACTIVE:'نشط',GRACE:'مهلة',READ_ONLY:'قراءة فقط',SUSPENDED:'موقوف',TERMINATED:'منتهٍ'};
+const CAT_AR = {BUG:'عطل',QUESTION:'سؤال',FEATURE:'تطوير',TRAINING:'تدريب'};
+const PR_AR = {P1:'حرجة P1',P2:'عالية P2',P3:'متوسطة P3',P4:'منخفضة P4'};
+const FLOW_NEXT = {NEW:['ASSIGNED'],ASSIGNED:['IN_PROGRESS','WAITING_CLIENT','RESOLVED'],
+  IN_PROGRESS:['WAITING_CLIENT','RESOLVED'],WAITING_CLIENT:['IN_PROGRESS','RESOLVED'],
+  RESOLVED:['CLOSED','IN_PROGRESS'],CLOSED:[]};
+
+// ── الإيراد ──
+async function rRevenue() {
+  const j = await api('/api/v1/revenue');
+  $('#t-revenue').innerHTML = `
+   <div class="row">
+    <div class="stat"><div class="k">MRR (يطابق النشطة بلا انحراف)</div><div class="v">$${j.mrr}</div></div>
+    <div class="stat"><div class="k">ARR</div><div class="v">$${j.arr}</div></div>
+    <div class="stat"><div class="k">عملاء نشطون</div><div class="v">${j.active_clients}</div></div>
+    <div class="stat"><div class="k">معدل التجديد 180ي</div><div class="v">${j.renewal_rate_180d === null ? '—' : (j.renewal_rate_180d*100).toFixed(1)+'%'}</div></div>
+    <div class="stat"><div class="k">الإيراد المتوقع 90ي</div><div class="v">$${j.expected_90d}</div></div>
+    <div class="stat"><div class="k">Churn 90ي</div><div class="v">${(j.churn_90d*100).toFixed(1)}%</div></div>
+   </div>
+   <div class="grid2">
+    <div class="card"><h3>المتأخرون بأعمار التأخر</h3>
+      <table><tr><th>العميل</th><th>الحالة</th><th>الأيام</th><th>القيمة السنوية</th></tr>
+      ${j.overdue.rows.map(r => `<tr><td>${esc(r.legal_name)}</td><td>${pill(r.status)}</td>
+        <td>${r.days_overdue}</td><td>$${r.annual_value}</td></tr>`).join('') || '<tr><td colspan=4>لا متأخرين 🎉</td></tr>'}
+      </table></div>
+    <div class="card"><h3>توزيع الباقات</h3>
+      ${Object.entries(j.packages).map(([k,v]) => `<p>${pill(k)} ${v} عميل</p>`).join('') || '—'}
+      <h3 style="margin-top:14px">إثبات MRR (مجموع القيم الشهرية النشطة)</h3>
+      <table><tr><th>العميل</th><th>القيمة الشهرية</th></tr>
+      ${j.mrr_proof.map(p => `<tr><td>${esc(p.code)}</td><td>$${p.monthly_value}</td></tr>`).join('')}
+      <tr><th>المجموع</th><th>$${j.mrr}</th></tr></table></div>
+   </div>`;
+}
+
+// ── العملاء ──
+let PLANS = [];
+async function rClients() {
+  const [clients, plans] = await Promise.all([api('/api/v1/clients'), api('/api/v1/plans')]);
+  PLANS = plans;
+  $('#t-clients').innerHTML = `
+   <div class="card"><h3>عميل جديد</h3><div class="row">
+     <input id="cname" placeholder="الاسم القانوني">
+     <input id="chotel" placeholder="الفندق">
+     <input id="crooms" placeholder="الغرف" type="number" style="width:80px">
+     <select id="cpkg"><option>LOCAL</option><option>CLOUD</option><option>HYBRID</option></select>
+     <select id="cplan">${plans.map(p => `<option value="${esc(p.code)}">${esc(p.name_ar)}</option>`).join('')}</select>
+     <button class="act" id="cadd">إضافة</button></div></div>
+   <div class="card"><h3>العملاء (${clients.length})</h3>
+    <table><tr><th>الكود</th><th>العميل</th><th>الباقة</th><th>الخطة</th><th>الانتهاء</th><th>الحالة</th><th>المبلغ الشهري</th><th></th></tr>
+    ${clients.map(c => `<tr><td>${esc(c.code)}</td><td>${esc(c.legal_name)}</td>
+      <td>${pill(c.package)}</td><td>${esc(c.plan_code)}</td><td>${esc(c.expiry_date)}</td>
+      <td>${pill(c.status)} ${esc(STATE_AR[c.status]||'')}</td><td>$${c.monthly_value}</td>
+      <td><button class="act alt" onclick="clientDetail('${esc(c.code)}')">فتح</button></td></tr>`).join('')}
+    </table></div>
+   <div id="cdetail"></div>`;
+  $('#cadd').onclick = async () => {
+    const plan = PLANS.find(p => p.code === $('#cplan').value);
+    const mods = plan ? Object.keys(plan.module_prices).slice(0, 3) : ['ACCOUNTING'];
+    try { await post('/api/v1/clients', { legal_name: $('#cname').value,
+      hotel_name: $('#chotel').value, rooms_count: +$('#crooms').value || 0,
+      package: $('#cpkg').value, plan_code: $('#cplan').value,
+      modules: ['ACCOUNTING', ...mods],
+      expiry_date: new Date(Date.now() + 365*864e5).toISOString().slice(0,10),
+      status: 'TRIAL', open_reason: 'إضافة من اللوحة' });
+      okm('أُضيف العميل'); rClients(); } catch (e) { err(e.message); }
+  };
+}
+async function clientDetail(code) {
+  const c = await api('/api/v1/clients/' + code);
+  const invs = await api('/api/v1/invoices');
+  const mine = invs.filter(i => i.client_code === code);
+  $('#cdetail').innerHTML = `
+   <div class="card"><h3>${esc(c.legal_name)} ${pill(c.status)}</h3>
+    <div class="grid2">
+      <div>
+        <h3>تغيير الحالة (سبب إلزامي §8-5)</h3>
+        <select id="stto">${['TRIAL','ACTIVE','GRACE','READ_ONLY','SUSPENDED','TERMINATED'].map(s => `<option>${s}</option>`).join('')}</select>
+        <input id="streason" placeholder="السبب الموثق" style="width:70%">
+        <button class="act" id="stbtn">تغيير</button>
+        <h3 style="margin-top:14px">السجل الزمني للحالات</h3>
+        <table><tr><th>من</th><th>إلى</th><th>السبب</th><th>بواسطة</th><th>الوقت</th></tr>
+        ${c.history.map(h => `<tr><td>${esc(h.from)}</td><td>${esc(h.to)}</td>
+          <td>${esc(h.reason)}</td><td class="mono">${esc(h.by).slice(0,8)}</td>
+          <td>${esc(h.at).slice(0,16).replace('T',' ')}</td></tr>`).join('')}</table>
+      </div>
+      <div>
+        <h3>فاتورة تجديد لهذا العميل</h3>
+        <select id="invplan">${PLANS.map(p => `<option value="${esc(p.code)}">${esc(p.name_ar)}</option>`).join('')}</select>
+        <input id="invdisc" placeholder="خصم %" type="number" value="0" style="width:90px">
+        <button class="act" id="invmake">إصدار فاتورة</button>
+        <h3 style="margin-top:14px">الفواتير</h3>
+        <table><tr><th>الرقم</th><th>الإجمالي</th><th>المدفوع</th><th>الحالة</th><th>تحصيل</th></tr>
+        ${mine.map(i => `<tr><td>${esc(i.number)}</td><td>$${i.total}</td><td>$${i.paid}</td>
+          <td>${pill(i.status)}</td>
+          <td>${i.status !== 'PAID' ? `<button class="act alt" onclick="payAll('${esc(i.number)}','${i.total}','${i.paid}')">تحصيل الباقي</button>` : '✔'}</td></tr>`).join('') || '<tr><td colspan=5>لا فواتير</td></tr>'}
+        </table>
+      </div>
+    </div></div>`;
+  $('#stbtn').onclick = async () => {
+    try { await post(`/api/v1/clients/${code}/status`,
+      { to_status: $('#stto').value, reason: $('#streason').value });
+      okm('تم تغيير الحالة'); clientDetail(code); } catch (e) { err(`${e.code||''} ${e.message}`); } };
+  $('#invmake').onclick = async () => {
+    const f = new Date(), t = new Date(Date.now() + 365*864e5);
+    try { const i = await post('/api/v1/invoices', { client_code: code,
+      plan_code: $('#invplan').value, period_from: f.toISOString().slice(0,10),
+      period_to: t.toISOString().slice(0,10), discount_pct: $('#invdisc').value || '0',
+      kind: 'RENEWAL' });
+      okm(`أُصدرت الفاتورة ${i.number} بإجمالي $${i.total}`); clientDetail(code);
+    } catch (e) { err(`${e.code||''} ${e.message}`); } };
+}
+async function payAll(number, total, paid) {
+  const rest = (parseFloat(total) - parseFloat(paid)).toFixed(4);
+  const ref = prompt(`تحصيل الباقي $${rest} للفاتورة ${number} — مرجع التحويل (إلزامي):`, 'TRX-');
+  if (!ref) return;
+  try { const j = await post('/api/v1/collections',
+    { invoice_number: number, amount: rest, method: 'TRANSFER', reference: ref });
+    okm(j.fully_paid ? `✔ اكتمل السداد — تولّد ترخيص مجدد آلي (تسلسل ${j.license?.serial}) يصل العميل فوراً`
+                     : 'سُجّل التحصيل الجزئي');
+    rClients();
+  } catch (e) { err(`${e.code||''} ${e.message}`); }
+}
+
+// ── التراخيص ──
+async function rLicenses() {
+  const [recs, clients] = await Promise.all([api('/api/v1/licenses'), api('/api/v1/clients')]);
+  $('#t-licenses').innerHTML = `
+   <div class="card"><h3>إصدار / تعديل ترخيص (يوقع بمفتاح الشركة Ed25519)</h3>
+    <div class="row">
+      <select id="lclient">${clients.map(c => `<option value="${esc(c.code)}">${esc(c.code)} — ${esc(c.trade_name||c.legal_name)}</option>`).join('')}</select>
+      <select id="lkind"><option>ISSUE</option><option>RENEW</option><option>MODIFY</option><option>REPAIR</option></select>
+      <input id="lusers" type="number" value="10" style="width:90px" title="أقصى مستخدمين">
+      <input id="ldays" type="number" value="365" style="width:90px" title="أيام">
+      <button class="act" id="lissue">إصدار موقّع</button></div>
+    <p style="font-size:12px;color:#777">تجاوز حدود الخطة ← يتطلب اعتماد مدير ثانٍ (§4).</p></div>
+   <div class="card"><h3>سجل الإصدارات</h3>
+    <table><tr><th>العميل</th><th>التسلسل</th><th>النوع</th><th>الانتهاء</th><th>الحالة</th><th>تجاوز الخطة</th><th></th></tr>
+    ${recs.map(r => `<tr><td>${esc(r.client)}</td><td>${r.serial}</td><td>${esc(r.kind)}</td>
+      <td>${esc(r.expires)}</td><td>${pill(r.status)}</td>
+      <td style="font-size:11px">${esc(r.over_plan_reason||'')}</td>
+      <td>${r.status === 'PENDING_APPROVAL' ? `<button class="act" onclick="approveLic('${r.id}')">اعتماد ثانٍ</button>` : `<button class="act alt" onclick="dlLic('${r.id}')">الملف</button>`}</td></tr>`).join('') || '<tr><td colspan=7>لا إصدارات بعد</td></tr>'}
+    </table></div>
+   <div class="card"><h3>قائمة إلغاء موقعة</h3>
+    <input id="revlic" placeholder="license_id مثل LIC-CLI-001" class="mono">
+    <select id="revact"><option>REVOKE</option><option>SUSPEND</option></select>
+    <button class="act" id="revpub">نشر</button>
+    <span style="font-size:12px;color:#777">SUSPEND = إيقاف نهائي بقرار موثّق (07 §3)</span></div>`;
+  $('#lissue').onclick = async () => {
+    try { const j = await post('/api/v1/licenses', { client_code: $('#lclient').value,
+      kind: $('#lkind').value, max_users: +$('#lusers').value || 10,
+      days: +$('#ldays').value || 365 });
+      okm(j.status === 'ACTIVE' ? `✔ صدر الترخيص تسلسل ${j.serial} وهو نشط`
+        : `⏳ بانتظار اعتماد ثانٍ: ${j.over_plan_reason}`); rLicenses();
+    } catch (e) { err(`${e.code||''} ${e.message}`); } };
+  $('#revpub').onclick = async () => {
+    if (!$('#revlic').value.trim()) return err('أدخل license_id');
+    try { const j = await post('/api/v1/revocations', { entries:
+      [{ serial: 1, license_id: $('#revlic').value.trim(), action: $('#revact').value }] });
+      okm(`نُشرت قائمة الإلغاء الموقعة تسلسل ${j.revocation_serial}`);
+    } catch (e) { err(`${e.code||''} ${e.message}`); } };
+}
+async function approveLic(id) {
+  try { const j = await post(`/api/v1/licenses/${id}/approve`);
+    okm(`اعتمد ${j.approved_by} — الترخيص نشط الآن`); rLicenses();
+  } catch (e) { err(`${e.code||''} ${e.message}`); } }
+async function dlLic(id) {
+  try { const j = await api(`/api/v1/licenses/${id}/file`);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' }));
+    a.download = `atheer-${j.license_id}-S${j.serial}.license`; a.click();
+    okm('نُزّل ملف .license الموقّع — أرسله للعميل (وضع معزول)');
+  } catch (e) { err(e.message); } }
+
+// ── التذاكر ──
+async function rTickets() {
+  const [tkts, clients] = await Promise.all([api('/api/v1/tickets'), api('/api/v1/clients')]);
+  $('#t-tickets').innerHTML = `
+   <div class="card"><h3>تذكرة جديدة</h3><div class="row">
+    <select id="tcl">${clients.map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join('')}</select>
+    <input id="ttitle" placeholder="العنوان" style="width:280px">
+    <select id="tcat"><option value="BUG">عطل</option><option value="QUESTION">سؤال</option>
+      <option value="FEATURE">تطوير</option><option value="TRAINING">تدريب</option></select>
+    <select id="tpri"><option>P1</option><option selected>P2</option><option>P3</option><option>P4</option></select>
+    <button class="act" id="tnew">فتح (SLA آلي — P1 يُشعِر المناوب ≤60ث)</button></div></div>
+   <div class="card"><h3>التذاكر (${tkts.length})</h3>
+    <table><tr><th>الرقم</th><th>العميل</th><th>العنوان</th><th>النوع</th><th>الأولوية</th><th>الحالة</th><th>SLA</th><th>إجراء</th></tr>
+    ${tkts.map(t => `<tr><td>${esc(t.number)}</td><td>${esc(t.client)}</td>
+      <td>${esc(t.title)}</td><td>${esc(CAT_AR[t.category]||t.category)}</td>
+      <td>${pill(t.priority)}</td><td>${esc(t.status)}${t.sla_breached ? ' ⚠️' : ''}</td>
+      <td>${esc((t.sla_due||'').slice(0,16).replace('T',' '))}</td>
+      <td>${FLOW_NEXT[t.status].map(n => `<button class="act alt" style="padding:2px 8px" onclick="flow('${esc(t.number)}','${n}')">${n}</button>`).join('')}
+          ${t.status !== 'CLOSED' ? `<button class="act alt" style="padding:2px 8px" onclick="escalate('${esc(t.number)}')">تصعيد</button>` : ''}</td></tr>`).join('') || '<tr><td colspan=8>لا تذاكر</td></tr>'}
+    </table></div>`;
+  $('#tnew').onclick = async () => {
+    try { const j = await post('/api/v1/tickets', { client_code: $('#tcl').value,
+      title: $('#ttitle').value, category: $('#tcat').value, priority: $('#tpri').value,
+      channel: 'IN_APP' });
+      okm(`فُتحت ${j.number} — SLA حتى ${j.sla_due.slice(0,16).replace('T',' ')}`); rTickets();
+    } catch (e) { err(`${e.code||''} ${e.message}`); } };
+}
+async function flow(num, to) {
+  let body = { to_status: to };
+  if (to === 'CLOSED') { const rc = prompt('السبب الجذري (إلزامي للأعطال):') || '';
+    body.root_cause = rc; }
+  try { await post(`/api/v1/tickets/${num}/transition`, body); okm('تم'); rTickets(); }
+  catch (e) { err(`${e.code||''} ${e.message}`); } }
+async function escalate(num) {
+  try { const j = await post(`/api/v1/tickets/${num}/escalate`);
+    okm(`صُعّدت إلى ${j.escalated_to}`); rTickets();
+  } catch (e) { err(`${e.code||''} ${e.message}`); } }
+
+// ── الصحة ──
+async function rHealth() {
+  const [fleet, releases, alerts] = await Promise.all([
+    api('/api/v1/health/fleet'), api('/api/v1/releases'),
+    api('/api/v1/fingerprint-alerts').catch(() => [])]);
+  $('#t-health').innerHTML = `
+   <div class="row">
+    <div class="stat"><div class="k">خضراء</div><div class="v" style="color:var(--ok)">${fleet.counts.GREEN}</div></div>
+    <div class="stat"><div class="k">صفراء</div><div class="v" style="color:var(--warn)">${fleet.counts.YELLOW}</div></div>
+    <div class="stat"><div class="k">حمراء</div><div class="v" style="color:var(--bad)">${fleet.counts.RED}</div></div>
+    <div class="stat"><div class="k">بلا نبض</div><div class="v">${fleet.counts.DARK}</div></div>
+   </div>
+   <div class="card"><h3>مؤشر العملاء الموحد (نبض/مزامنة/نسخ احتياطي/قرص)</h3>
+    <table><tr><th>العميل</th><th>الباقة</th><th>اللون</th><th>آخر نبض</th><th>النسخة</th><th>تراكم Outbox</th><th>النسخ</th><th>القرص GB</th><th>الأسباب</th></tr>
+    ${fleet.rows.map(r => `<tr><td>${esc(r.legal_name)}</td><td>${pill(r.package)}</td>
+      <td>${pill(r.color)}</td><td>${esc((r.last_beat||'—').slice(0,16).replace('T',' '))}</td>
+      <td>${esc(r.product_version)}</td><td>${r.outbox_lag ?? '—'}</td>
+      <td>${r.backup_ok === null ? '—' : r.backup_ok ? '✔' : '✖'}</td>
+      <td>${esc(r.disk_free_gb ?? '—')}</td>
+      <td style="font-size:11px">${esc(r.reasons.join('؛ '))}</td></tr>`).join('')}
+    </table></div>
+   <div class="grid2">
+    <div class="card"><h3>حلقات التحديث (Canary ← تعميم)</h3>
+     <div class="row"><input id="relv" placeholder="0.9.1"><select id="relr"><option>CANARY</option><option>GENERAL</option></select>
+      <button class="act" id="relpub">نشر إصدار</button></div>
+     <table><tr><th>النسخة</th><th>الحلقة</th><th>حدّثوا</th><th>ملاحظات</th></tr>
+     ${releases.map(r => `<tr><td>${esc(r.version)}</td><td>${pill(r.ring)}</td>
+       <td>${r.updates}</td><td>${esc(r.notes)}</td></tr>`).join('') || '<tr><td colspan=4>—</td></tr>'}</table></div>
+    <div class="card"><h3>أعلام البصمة (جهاز على عميل آخر — 07 §4-5)</h3>
+     ${alerts.map(a => `<p>⚠️ بصمة <span class="mono">${esc(a.hash)}</span> ظهرت لدى: ${esc(a.seen_on.join('، '))} — ${esc(a.at).slice(0,10)}</p>`).join('') || '<p>لا أعلام 🎉</p>'}
+    </div>
+   </div>`;
+  $('#relpub').onclick = async () => {
+    try { await post('/api/v1/releases', { version: $('#relv').value,
+      ring: $('#relr').value, notes: 'نُشر من اللوحة' });
+      okm('نُشر الإصدار'); rHealth(); } catch (e) { err(e.message); } };
+}
+
+// ── التنبيهات/التدقيق ──
+async function rNotes() {
+  const j = await api('/api/v1/notifications');
+  $('#t-notes').innerHTML = `<div class="card"><h3>تنبيهاتك ومهام دورك (${j.length})</h3>
+   <table><tr><th>النوع</th><th>المحتوى</th><th>الوقت</th></tr>
+   ${j.map(n => `<tr><td>${pill(n.kind)}</td>
+     <td class="mono" style="direction:rtl">${esc(JSON.stringify(n.payload))}</td>
+     <td>${esc(n.at).slice(0,16).replace('T',' ')}</td></tr>`).join('') || '<tr><td colspan=3>لا تنبيهات</td></tr>'}
+   </table></div>`;
+}
+async function rAudit() {
+  try {
+    const j = await api('/api/v1/audit');
+    $('#t-audit').innerHTML = `<div class="card"><h3>التدقيق المستقل المسلسل (§7 — مدقق ربع سنوي)</h3>
+     <table><tr><th>#</th><th>الوحدة</th><th>الفعل</th><th>الكيان</th><th>التجزئة</th><th>الوقت</th></tr>
+     ${j.map(a => `<tr><td>${a.id}</td><td>${esc(a.module)}</td><td>${esc(a.action)}</td>
+       <td>${esc(a.entity)}</td><td class="mono">${esc(a.row_hash)}…</td>
+       <td>${esc(a.at).slice(0,19).replace('T',' ')}</td></tr>`).join('')}
+     </table></div>`;
+  } catch (e) { $('#t-audit').innerHTML = `<div class="card"><div class="err">${esc(e.message)} — التدقيق للمدير فقط</div></div>`; }
+}
+
+// استئناف جلسة
+if (TOK) {
+  api('/api/v1/notifications').then(() => boot(null))
+    .catch(() => { localStorage.removeItem('vendor.tok'); TOK = ''; });
+}
+</script>
+</body>
+</html>
