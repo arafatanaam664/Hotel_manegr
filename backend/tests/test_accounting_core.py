@@ -86,6 +86,8 @@ def test_manual_journal_posts_with_sequential_number(client, auth_hdr):
 
 
 def test_reversal_creates_mirror_and_marks_source(client, auth_hdr):
+    # خط الأساس: الزرع يحوي قيود افتتاح مخزون (POS) — نقيس الدلتا لا المطلق
+    tb0 = client.get('/api/reports/trial-balance', headers=auth_hdr).json()
     r = client.post('/api/journals/manual', json=_balanced_body(),
                     headers=auth_hdr)
     je = r.json()
@@ -104,7 +106,9 @@ def test_reversal_creates_mirror_and_marks_source(client, auth_hdr):
     tb = client.get('/api/reports/trial-balance', headers=auth_hdr).json()
     assert tb['balanced'] is True
     assert tb['net_balance_zero'] is True
-    assert tb['total_debit'] == tb['total_credit'] == '200.0000'
+    grew = float(tb['total_debit']) - float(tb0['total_debit'])
+    assert grew == 200.0  # قيد 100 + عكسه 100 فوق خط الأساس
+    assert tb['total_debit'] == tb['total_credit']
 
 
 def test_double_reversal_blocked(client, auth_hdr):

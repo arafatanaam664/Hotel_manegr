@@ -15,6 +15,11 @@ import Reservations from './pages/Reservations'
 import ReservationDetail from './pages/ReservationDetail'
 import NightAudit from './pages/NightAudit'
 import Guests from './pages/Guests'
+import PosSale from './pages/PosSale'
+import PosOrders from './pages/PosOrders'
+import PosShifts from './pages/PosShifts'
+import PosCatalog from './pages/PosCatalog'
+import PosReports from './pages/PosReports'
 
 export default function App() {
   const { session } = useAuth()
@@ -35,6 +40,11 @@ export default function App() {
         <Route path="reservations/:id" element={<ReservationDetail />} />
         <Route path="guests" element={<Guests />} />
         <Route path="night-audit" element={<NightAudit />} />
+        <Route path="pos" element={<PosSale />} />
+        <Route path="pos/orders" element={<PosOrders />} />
+        <Route path="pos/shifts" element={<PosShifts />} />
+        <Route path="pos/catalog" element={<PosCatalog />} />
+        <Route path="pos/reports" element={<PosReports />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
         <Route path="journals/new" element={<JournalNew />} />

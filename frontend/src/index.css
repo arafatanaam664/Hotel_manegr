@@ -18,3 +18,15 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* طباعة حرارية للإيصالات وتقارير Z (80مم) */
+@media print {
+  body * { visibility: hidden; }
+  .receipt-print, .receipt-print * { visibility: visible; }
+  .receipt-print {
+    position: fixed; inset: 0 auto auto 0;
+    width: 72mm; padding: 4mm; background: white;
+    font-family: 'Courier New', monospace; direction: rtl;
+  }
+  .no-print { display: none !important; }
+}

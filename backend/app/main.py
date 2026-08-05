@@ -66,13 +66,14 @@ def create_app() -> FastAPI:
                                'errors': exc.errors()}})
 
     # ── الموجِّهات ─────────────────────────────────────
-    from .api import accounting, auth, health, hotel, org, reports
+    from .api import accounting, auth, health, hotel, org, pos, reports
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
     app.include_router(accounting.router)
     app.include_router(reports.router)
     app.include_router(hotel.router)
+    app.include_router(pos.router)
 
     # ── الإقلاع: جداول + زرع ─────────────────────────────
     @app.on_event('startup')

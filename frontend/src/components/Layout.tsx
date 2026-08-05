@@ -8,6 +8,11 @@ const NAV = [
   { to: '/reservations', label: 'الحجوزات', icon: '📅', perm: 'reservations.view' },
   { to: '/guests', label: 'النزلاء والشركات', icon: '👤', perm: 'guests.view' },
   { to: '/night-audit', label: 'التدقيق الليلي', icon: '🌙', perm: 'frontdesk.view' },
+  { to: '/pos', label: 'شاشة البيع', icon: '🍽', perm: 'pos.sell' },
+  { to: '/pos/orders', label: 'الطلبات والفواتير', icon: '🧾', perm: 'pos.view' },
+  { to: '/pos/shifts', label: 'الورديات وZ', icon: '⏱', perm: 'pos.view' },
+  { to: '/pos/catalog', label: 'كتالوج البيع', icon: '🗂', perm: 'pos.view' },
+  { to: '/pos/reports', label: 'تقارير البيع', icon: '📈', perm: 'pos.reports' },
   { to: '/accounts', label: 'دليل الحسابات', icon: '☷', perm: 'accounts.view' },
   { to: '/journals', label: 'القيود اليومية', icon: '✎', perm: 'journals.view' },
   { to: '/journals/new', label: 'قيد يدوي جديد', icon: '＋', perm: 'journals.manual' },
@@ -47,7 +52,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          قيد الإصدار 0.1.0 — بوابة G1 ✅
+          إصدار 0.4.0 — بوابات G1..G4 ✅
         </div>
       </aside>
 

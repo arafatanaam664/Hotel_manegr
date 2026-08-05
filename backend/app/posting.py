@@ -253,6 +253,8 @@ def post_event(db: Session, *, tenant_id: str, branch_code: str,
 
 
 _JTYPE = {'ROOM_NIGHT': 'AUTO_ROOM', 'POS_SALE': 'AUTO_POS',
+          'POS_COGS': 'AUTO_POS', 'CASH_OVER': 'AUTO_POS',
+          'CASH_SHORT': 'AUTO_POS', 'STOCK_OPEN_POS': 'AUTO_POS',
           'PURCHASE_CREDIT': 'AUTO_PURCHASE', 'PURCHASE_CASH': 'AUTO_PURCHASE',
           'SUPPLIER_PAYMENT': 'AUTO_PURCHASE', 'PAYROLL_ACCRUAL': 'AUTO_PAYROLL',
           'DEPRECIATION': 'AUTO_DEPRECIATION', 'GUEST_DEPOSIT': 'AUTO_ROOM',

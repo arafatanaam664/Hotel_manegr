@@ -110,27 +110,37 @@ FRONTDESK_WORK = ['reservations.create', 'reservations.modify',
                   'reservations.cancel', 'guests.manage', 'checkin.do',
                   'checkout.do', 'folio.charge', 'folio.pay', 'folio.view']
 
+# صلاحيات نقاط البيع (ملف 04 — §3 قواعد صارمة: void/خصم فوق الحد بصلاحية)
+POS_OPS_PERMS = ['pos.view', 'pos.tables.view', 'pos.zreport.view',
+                 'pos.reports']
+POS_WORK = ['pos.sell', 'pos.shift.open', 'pos.shift.close']
+POS_SUPERVISOR_EXTRA = ['pos.void', 'pos.approve', 'pos.return',
+                        'pos.catalog.manage', 'pos.tables.manage',
+                        'pos.stock.manage']
+
 ROLES = [
  ('OWNER', 'مالك', 'كل الصلاحيات', ['*']),
  ('GM', 'مدير عام', 'إدارة التشغيل والتقارير والاعتمادات',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.post',
    'journals.reverse', 'periods.close', 'settings.manage']
-  + HOTEL_OPS_PERMS + FRONTDESK_WORK
+  + HOTEL_OPS_PERMS + FRONTDESK_WORK + POS_OPS_PERMS + POS_WORK
+  + POS_SUPERVISOR_EXTRA
   + ['corporates.manage', 'checkout.credit_transfer', 'discounts.approve',
      'nightaudit.run', 'hk.manage', 'rooms.manage', 'rates.manage',
      'extras.manage', 'checkin.dirty_override', 'audit.view']),
  ('FINANCE_MANAGER', 'مدير مالي', 'المحاسبة الكاملة والإغلاق',
   ['reports.view', 'accounts.view', 'accounts.manage', 'journals.view',
    'journals.manual', 'journals.post', 'journals.reverse', 'periods.close']
-  + HOTEL_OPS_PERMS
+  + HOTEL_OPS_PERMS + POS_OPS_PERMS + ['pos.stock.manage']
   + ['discounts.approve', 'checkout.credit_transfer', 'corporates.manage',
      'folio.view']),
  ('ACCOUNTANT', 'محاسب', 'إدخال ومراجعة',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.manual',
-   'reports.hotel', 'folio.view']),
+   'reports.hotel', 'folio.view', 'pos.reports', 'pos.zreport.view']),
  ('AUDITOR', 'مدقق داخلي', 'قراءة وتدقيق فقط',
   ['reports.view', 'accounts.view', 'journals.view', 'audit.view',
-   'reports.hotel', 'folio.view', 'frontdesk.view']),
+   'reports.hotel', 'folio.view', 'frontdesk.view', 'pos.view',
+   'pos.reports', 'pos.zreport.view']),
  ('RECEPTIONIST', 'موظف استقبال', 'حجوزات وتسكين وتحصيل',
   HOTEL_OPS_PERMS + FRONTDESK_WORK + ['folio.discount']),
  ('NIGHT_AUDITOR', 'مدقق ليلي', 'إجراء إقفال يوم العمل',
@@ -139,6 +149,11 @@ ROLES = [
   ['frontdesk.view', 'rooms.view', 'hk.cleaning']),
  ('HK_SUPERVISOR', 'مشرف طوابق', 'فحص الغرف ومناطق التعطيل',
   ['frontdesk.view', 'rooms.view', 'hk.cleaning', 'hk.manage']),
+ ('POS_CASHIER', 'كاشير نقطة بيع', 'بيع وتسديد وفتح/إقفال ورديته',
+  POS_OPS_PERMS + POS_WORK),
+ ('POS_SUPERVISOR', 'مشرف نقاط بيع',
+  'إلغاء البنود، اعتماد الخصومات والمجاني، إدارة الكتالوج والمخزون',
+  POS_OPS_PERMS + POS_WORK + POS_SUPERVISOR_EXTRA),
 ]
 
 POSTING_MAPS = [
@@ -155,9 +170,21 @@ POSTING_MAPS = [
   [{'account': '1102', 'side': 'D', 'from': 'gross', 'desc': 'تحصيل POS نقدي'},
    {'account': '4201', 'side': 'C', 'from': 'net', 'desc': 'إيراد مطعم صافي'},
    {'account': '2210', 'side': 'C', 'from': 'tax', 'desc': 'ضريبة'}]),
- ('POS_COGS', 'قيد تكلفة مبيعات تلقائي',
+ ('POS_COGS', 'قيد تكلفة مبيعات تلقائي',  # #13
   [{'account': '5101', 'side': 'D', 'from': 'cost', 'desc': 'تكلفة المبيعات'},
    {'account': '1210', 'side': 'C', 'from': 'cost', 'desc': 'خفض المخزون'}]),
+ ('CASH_OVER', 'زيادة عهدة صندوق نقطة بيع ضمن التسامح (Z-Report)',
+  [{'account': '1102', 'side': 'D', 'from': 'amount', 'desc': 'فرق عهدة زيادة'},
+   {'account': '4901', 'side': 'C', 'from': 'amount',
+    'desc': 'إيراد فرق صندوق'}]),
+ ('CASH_SHORT', 'نقص عهدة صندوق نقطة بيع ضمن التسامح (Z-Report)',
+  [{'account': '7104', 'side': 'D', 'from': 'amount',
+    'desc': 'خسارة فرق صندوق'},
+   {'account': '1102', 'side': 'C', 'from': 'amount', 'desc': 'فرق عهدة نقص'}]),
+ ('STOCK_OPEN_POS', 'رصيد مخزون افتتاحي لنقطة بيع (ترحيل بلا فقدان)',
+  [{'account': '1210', 'side': 'D', 'from': 'amount', 'desc': 'رصيد افتتاحي'},
+   {'account': '8002', 'side': 'C', 'from': 'amount',
+    'desc': 'مقابل افتتاحي مرحلي'}]),
  ('PURCHASE_CREDIT', 'شراء مخزون بالأجل',
   [{'account': '1210', 'side': 'D', 'from': 'amount', 'desc': 'إدخال مخزون'},
    {'account': '2101', 'side': 'C', 'from': 'amount', 'party': True,
@@ -317,6 +344,86 @@ HOTEL_RATE_PLANS = [
  ('BB', 'شامل إفطار', 10, True, 'إلغاء مجاني حتى 24 ساعة', 1),
 ]
 
+# ════════════════════════════════════════════════════════════════════
+# بيانات زرع نقطة البيع التجريبية — ملف 04 §1/§2
+# ════════════════════════════════════════════════════════════════════
+POS_OUTLETS = [  # (code, name_ar, name_en, cash_acct, revenue_acct, cost_center)
+ ('REST', 'المطعم الرئيسي', 'Main Restaurant', '1102', '4201', 'CC-FB'),
+ ('CAFE', 'كافيه اللوبي', 'Lobby Cafe', '1102', '4202', 'CC-FB'),
+]
+
+POS_CATEGORIES = [  # (code, name_ar, name_en, color, station, sort)
+ ('FOOD', 'الأطباق الرئيسية', 'Mains', '#b45309', 'KITCHEN', 1),
+ ('GRILL', 'مشويات', 'Grill', '#991b1b', 'KITCHEN', 2),
+ ('APPT', 'مقبلات وسلطات', 'Starters', '#15803d', 'KITCHEN', 3),
+ ('BEER', 'مشروبات ساخنة وباردة', 'Beverages', '#0369a1', 'BAR', 4),
+ ('DSRT', 'حلويات', 'Desserts', '#a21caf', 'KITCHEN', 5),
+]
+
+# (code, name_ar, name_en, category, price, type, cost, revenue_acct)
+POS_ITEMS = [
+ ('BURGER-CL', 'برجر كلاسيك', 'Classic Burger', 'FOOD', 9.5, 'COMPOSITE', 0, '4201'),
+ ('BURGER-CH', 'برجر دجاج مقرمش', 'Crispy Chicken Burger', 'FOOD', 8.5, 'COMPOSITE', 0, '4201'),
+ ('PASTA-ALF', 'باستا ألفريدو', 'Pasta Alfredo', 'FOOD', 11, 'SERVICE', 0, '4201'),
+ ('PIZZA-MRG', 'بيتزا مارغريتا', 'Pizza Margherita', 'FOOD', 10, 'SERVICE', 0, '4201'),
+ ('KEBAB', 'كباب حلبي (سيخان)', 'Kebab Plate', 'GRILL', 14, 'SERVICE', 0, '4201'),
+ ('TIKA', 'تكة دجاج', 'Chicken Tikka', 'GRILL', 12, 'SERVICE', 0, '4201'),
+ ('FATOUSH', 'فتوش', 'Fattoush', 'APPT', 4.5, 'SERVICE', 0, '4201'),
+ ('HUMMUS', 'حمص بالطحينة', 'Hummus', 'APPT', 4, 'SERVICE', 0, '4201'),
+ ('SOUP-DAY', 'شوربة اليوم', 'Soup of the Day', 'APPT', 3.5, 'SERVICE', 0, '4201'),
+ ('TEA-ADANI', 'شاي عدني', 'Adani Tea', 'BEER', 1.5, 'SERVICE', 0, '4202'),
+ ('COFFEE-AR', 'قهوة عربية', 'Arabic Coffee', 'BEER', 2, 'SERVICE', 0, '4202'),
+ ('ESPRESSO', 'إسبريسو', 'Espresso', 'BEER', 2.5, 'SERVICE', 0, '4202'),
+ ('LATTE', 'كافيه لاتيه', 'Cafe Latte', 'BEER', 3.5, 'SERVICE', 0, '4202'),
+ ('JUICE-OR', 'عصير برتقال طازج', 'Fresh Orange Juice', 'BEER', 3, 'COMPOSITE', 0, '4202'),
+ ('WATER', 'مياه معدنية', 'Mineral Water', 'BEER', 1, 'STOCK', 0.45, '4202'),
+ ('SODA', 'مشروب غازي', 'Soft Drink', 'BEER', 1.5, 'STOCK', 0.7, '4202'),
+ ('KUNAFA', 'كنافة نابلسية', 'Kunafa', 'DSRT', 5, 'SERVICE', 0, '4201'),
+ ('ICECREAM', 'آيس كريم (3 سكوب)', 'Ice Cream', 'DSRT', 4, 'SERVICE', 0, '4201'),
+ # مكونات الوصفات (مخزونية — لا تُباع منفردة لكنها متاحة كأصناف)
+ ('BUN', 'خبز برجر', 'Burger Bun', 'FOOD', 0, 'STOCK', 0.35, '4201'),
+ ('BEEF-PAT', 'قطعة لحم برجر', 'Beef Patty', 'FOOD', 0, 'STOCK', 2.2, '4201'),
+ ('CHKN-FIL', 'فيليه دجاج', 'Chicken Fillet', 'FOOD', 0, 'STOCK', 1.9, '4201'),
+ ('CHEESE-SL', 'شريحة جبن', 'Cheese Slice', 'FOOD', 0, 'STOCK', 0.3, '4201'),
+ ('FRIES-PT', 'بطاطس (حصة)', 'Fries Portion', 'FOOD', 0, 'STOCK', 0.8, '4201'),
+ ('ORANGE-KG', 'برتقال (كجم)', 'Oranges KG', 'BEER', 0, 'STOCK', 1.2, '4202'),
+]
+
+# وصفات: (الصنف المركب, [(المكون, الكمية لكل وحدة), ...]) — قبول #3 حرفية
+POS_RECIPES = [
+ ('BURGER-CL', [('BUN', 1), ('BEEF-PAT', 1), ('CHEESE-SL', 1), ('FRIES-PT', 1)]),
+ ('BURGER-CH', [('BUN', 1), ('CHKN-FIL', 1), ('CHEESE-SL', 1), ('FRIES-PT', 1)]),
+ ('JUICE-OR', [('ORANGE-KG', 0.4)]),
+]
+
+POS_MODIFIERS = [  # (name_ar, name_en, price)
+ ('إكسترا جبن', 'Extra Cheese', 1), ('إكسترا لحم', 'Extra Patty', 2.5),
+ ('بدون بصل', 'No Onion', 0), ('حار إضافي', 'Extra Spicy', 0),
+ ('حليب شوفان', 'Oat Milk', 0.8), ('سكر أقل', 'Less Sugar', 0),
+]
+POS_ITEM_MODS = {  # صنف ← معدلاته
+ 'BURGER-CL': ['إكسترا جبن', 'إكسترا لحم', 'بدون بصل', 'حار إضافي'],
+ 'BURGER-CH': ['إكسترا جبن', 'بدون بصل', 'حار إضافي'],
+ 'LATTE': ['حليب شوفان', 'سكر أقل'], 'ESPRESSO': ['سكر أقل'],
+}
+
+POS_TABLES = [  # (outlet, name, zone, seats)
+ ('REST', 'طاولة 1', 'القاعة الرئيسية', 4), ('REST', 'طاولة 2', 'القاعة الرئيسية', 4),
+ ('REST', 'طاولة 3', 'القاعة الرئيسية', 6), ('REST', 'طاولة 4', 'القاعة الرئيسية', 2),
+ ('REST', 'طاولة 5', 'التراس', 4), ('REST', 'طاولة 6', 'التراس', 8),
+ ('CAFE', 'ركن 1', 'اللوبي', 2), ('CAFE', 'ركن 2', 'اللوبي', 2),
+]
+
+# رصيد افتتاحي: (outlet, item, qty, unit_cost)
+POS_STOCK_OPEN = [
+ ('REST', 'BUN', 200, 0.35), ('REST', 'BEEF-PAT', 80, 2.2),
+ ('REST', 'CHKN-FIL', 60, 1.9), ('REST', 'CHEESE-SL', 120, 0.3),
+ ('REST', 'FRIES-PT', 100, 0.8), ('REST', 'ORANGE-KG', 25, 1.2),
+ ('REST', 'WATER', 300, 0.45), ('REST', 'SODA', 240, 0.7),
+ ('CAFE', 'ORANGE-KG', 10, 1.2), ('CAFE', 'WATER', 100, 0.45),
+ ('CAFE', 'SODA', 80, 0.7),
+]
+
 
 def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                   admin_password: str) -> dict:
@@ -382,6 +489,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                             effective_from=date(2020, 1, 1),
                             effective_to=None))
     seed_hotel(db, tid, bid)
+    seed_pos(db, tid, bid)
 
     # أدوار ومستخدم مدير
     role_ids = {}
@@ -489,8 +597,127 @@ def seed_hotel(db: Session, tid: str, bid: str) -> dict:
     return added
 
 
+def seed_pos(db: Session, tid: str, bid: str) -> dict:
+    """زرع وحدة POS (إدخالات idempotent): منفذان، كتالوج، وصفات، طاولات،
+    ورصيد افتتاحي بقيد STOCK_OPEN_POS عبر المحرك (لا مخزوناً حراً أبداً)."""
+    from .posting import post_event  # استيراد متأخر لتفادي الدوران
+    added = {'outlets': 0, 'items': 0, 'stock': 0}
+    today = date.today()
+
+    outlet_ids = {}
+    for code, name_ar, name_en, cash, rev, cc in POS_OUTLETS:
+        row = db.execute(select(m.PosOutlet).where(
+            m.PosOutlet.tenant_id == tid, m.PosOutlet.code == code)
+        ).scalar_one_or_none()
+        if not row:
+            row = m.PosOutlet(id=new_uuid(), tenant_id=tid, branch_id=bid,
+                              code=code, name_ar=name_ar, name_en=name_en,
+                              cash_account_code=cash,
+                              default_revenue_account_code=rev,
+                              cost_center_code=cc, created_at=utcnow())
+            db.add(row)
+            db.flush()
+            added['outlets'] += 1
+        outlet_ids[code] = row.id
+
+    cat_ids = {}
+    for code, name_ar, name_en, color, station, so in POS_CATEGORIES:
+        row = db.execute(select(m.PosCategory).where(
+            m.PosCategory.tenant_id == tid, m.PosCategory.code == code)
+        ).scalar_one_or_none()
+        if not row:
+            row = m.PosCategory(id=new_uuid(), tenant_id=tid, code=code,
+                                name_ar=name_ar, name_en=name_en, color=color,
+                                station=station, sort_order=so)
+            db.add(row)
+            db.flush()
+        cat_ids[code] = row.id
+
+    item_ids = {}
+    for code, name_ar, name_en, cat, price, typ, cost, rev in POS_ITEMS:
+        row = db.execute(select(m.PosItem).where(
+            m.PosItem.tenant_id == tid, m.PosItem.code == code)
+        ).scalar_one_or_none()
+        if not row:
+            row = m.PosItem(id=new_uuid(), tenant_id=tid, code=code,
+                            name_ar=name_ar, name_en=name_en,
+                            category_id=cat_ids[cat], price=price,
+                            item_type=typ, cost=cost,
+                            revenue_account_code=rev)
+            db.add(row)
+            db.flush()
+            added['items'] += 1
+        item_ids[code] = row.id
+
+    mod_ids = {}
+    for name_ar, name_en, price in POS_MODIFIERS:
+        row = db.execute(select(m.PosModifier).where(
+            m.PosModifier.tenant_id == tid, m.PosModifier.name_ar == name_ar)
+        ).scalar_one_or_none()
+        if not row:
+            row = m.PosModifier(id=new_uuid(), tenant_id=tid, name_ar=name_ar,
+                                name_en=name_en, price=price)
+            db.add(row)
+            db.flush()
+        mod_ids[name_ar] = row.id
+
+    for icode, mods in POS_ITEM_MODS.items():
+        for mname in mods:
+            if not db.execute(select(m.PosItemModifier).where(
+                    m.PosItemModifier.item_id == item_ids[icode],
+                    m.PosItemModifier.modifier_id == mod_ids[mname])).first():
+                db.add(m.PosItemModifier(id=new_uuid(), tenant_id=tid,
+                                         item_id=item_ids[icode],
+                                         modifier_id=mod_ids[mname]))
+    db.flush()
+
+    for pcode, comps in POS_RECIPES:
+        for ccode, qty in comps:
+            if not db.execute(select(m.PosRecipe).where(
+                    m.PosRecipe.parent_item_id == item_ids[pcode],
+                    m.PosRecipe.component_item_id == item_ids[ccode])).first():
+                db.add(m.PosRecipe(id=new_uuid(), tenant_id=tid,
+                                   parent_item_id=item_ids[pcode],
+                                   component_item_id=item_ids[ccode],
+                                   qty=qty))
+    db.flush()
+
+    for ocode, name, zone, seats in POS_TABLES:
+        if not db.execute(select(m.PosTable).where(
+                m.PosTable.outlet_id == outlet_ids[ocode],
+                m.PosTable.name == name)).first():
+            db.add(m.PosTable(id=new_uuid(), tenant_id=tid,
+                              outlet_id=outlet_ids[ocode], name=name,
+                              zone=zone, seats=seats))
+    db.flush()
+
+    for ocode, icode, qty, cost in POS_STOCK_OPEN:
+        exists = db.execute(select(m.PosStock).where(
+            m.PosStock.outlet_id == outlet_ids[ocode],
+            m.PosStock.item_id == item_ids[icode])).scalar_one_or_none()
+        if exists:
+            continue
+        db.add(m.PosStock(id=new_uuid(), tenant_id=tid,
+                          outlet_id=outlet_ids[ocode],
+                          item_id=item_ids[icode], qty_on_hand=qty))
+        db.add(m.PosStockMove(id=new_uuid(), tenant_id=tid,
+                              outlet_id=outlet_ids[ocode],
+                              item_id=item_ids[icode], qty_delta=qty,
+                              unit_cost=cost, reason='OPEN',
+                              actor_id='system', created_at=utcnow()))
+        post_event(db, tenant_id=tid, branch_code='MAIN',
+                   event_type='STOCK_OPEN_POS',
+                   event_key=f'posstock:open:{ocode}:{icode}',
+                   entry_date=today, amounts={'amount': str(qty * cost)},
+                   actor_id='system',
+                   narration=f'رصيد افتتاحي {icode} × {qty} @ {cost}')
+        added['stock'] += 1
+    db.flush()
+    return added
+
+
 def ensure_hotel_upgrade(db: Session) -> dict:
-    """يرفع قاعدة قائمة (تحوي حسابات) بكيانات الفندق دون فقدان أي بيانات."""
+    """يرفع قاعدة قائمة (تحوي حسابات) بكيانات الفندق وPOS دون فقدان بيانات."""
     tenant = db.execute(select(m.Tenant).limit(1)).scalar_one_or_none()
     if tenant is None:
         return {'upgraded': False, 'reason': 'empty-db'}
@@ -534,5 +761,7 @@ def ensure_hotel_upgrade(db: Session) -> dict:
     out['maps'] += added['maps']
     out['rooms'] = added['rooms']
     out['extras'] = added['extras']
+    pos_added = seed_pos(db, tenant.id, branch.id)
+    out['pos'] = pos_added
     db.commit()
     return out
