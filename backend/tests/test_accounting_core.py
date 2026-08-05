@@ -162,11 +162,17 @@ def test_closed_period_rejects_posting(client, auth_hdr):
                   if p['start_date'] <= TODAY <= p['end_date'])
     r = client.post(f"/api/periods/{p_this['id']}/close", headers=auth_hdr)
     assert r.status_code == 200
-    assert r.json()['status'] == 'CLOSED'
+    # 02 §5 — الإغلاق الأول لين (SOFT): يمنع العادي ويسمح بتسوية FM فقط
+    assert r.json()['status'] == 'SOFT_CLOSED'
     resp = client.post('/api/journals/manual', json=_balanced_body(),
                        headers=auth_hdr)
     assert resp.status_code == 400
     assert _err(resp) == 'ACCOUNTING.CLOSED_PERIOD'
+    # الصلب نهائي مطلقاً — ولو كتسوية
+    r2 = client.post(f"/api/periods/{p_this['id']}/hard-close",
+                     headers=auth_hdr)
+    assert r2.status_code == 200
+    assert r2.json()['status'] == 'HARD_CLOSED'
 
 
 # ─── التفويض وسجل التدقيق ─────────────────────────────

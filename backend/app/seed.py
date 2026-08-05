@@ -563,6 +563,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
     seed_pos(db, tid, bid)
     seed_inv(db, tid, bid)
     seed_hr(db, tid, bid)
+    seed_fa(db, tid, bid)
 
     # أدوار ومستخدم مدير
     role_ids = {}
@@ -1051,6 +1052,7 @@ def ensure_hotel_upgrade(db: Session) -> dict:
     out['pos'] = pos_added
     out['inv'] = seed_inv(db, tenant.id, branch.id)
     out['hr'] = seed_hr(db, tenant.id, branch.id)
+    out['fa'] = seed_fa(db, tenant.id, branch.id)
     db.commit()
     return out
 
@@ -1298,3 +1300,67 @@ ROLES.append(
     ('HR_MANAGER', 'مدير موارد بشرية',
      'ملفات وحضور وإجازات وإعداد مسيرات (لا اعتماد مالي ذاتي — ملف 14)',
      HR_VIEW + HR_MANAGER_WORK))
+
+# دمج صلاحيات المرحلة 7: الأصول الثابتة + تسويات الفترات اللينة
+FA_VIEW = ['fa.view']
+FA_FINANCE = ['fa.manage', 'periods.adjust']
+for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
+    if _code == 'FINANCE_MANAGER':
+        ROLES[_i] = (_code, _name, _desc, _perms + FA_VIEW + FA_FINANCE)
+    elif _code in ('ACCOUNTANT', 'AUDITOR', 'GM'):
+        ROLES[_i] = (_code, _name, _desc, _perms + FA_VIEW)
+
+
+# ════════════════════════════════════════════════════════════════════
+# زرع الأصول الثابتة التجريبية — ملف 11 (ز) (أصول وهمية للمعاينة فقط)
+# ════════════════════════════════════════════════════════════════════
+def seed_fa(db: Session, tid: str, bid: str) -> dict:
+    if db.execute(select(m.FaAsset).where(
+            m.FaAsset.tenant_id == tid).limit(1)).first():
+        return {'assets': 0}
+    from decimal import Decimal
+    from . import assets as FA
+    today = date.today()
+
+    def back(months: int) -> date:
+        y = today.year
+        mo = today.month - months
+        while mo < 1:
+            mo += 12
+            y -= 1
+        return date(y, mo, 1)
+
+    demo = [
+        ('أثاث ردهة الاستقبال الرئيسية', 'أثاث وتجهيزات', back(8),
+         '4500', '500', 60, 'STRAIGHT', '1520'),
+        ('مولد كهربائي احتياطي 120kVA', 'معدات طاقة', back(14),
+         '9000', '1500', 96, 'STRAIGHT', '1530'),
+        ('سيارة نزلاء فان 12 راكب', 'وسائل نقل', back(5),
+         '12000', '2000', 60, 'DECLINING', '1540'),
+    ]
+    from .posting import create_and_post_journal
+    n = 0
+    for name, cat, pdate, cost, salv, life, method, acc in demo:
+        a = FA.create_asset(db, tenant_id=tid, actor_id='system-seed',
+                            name=name, category=cat, purchase_date=pdate,
+                            cost=Decimal(cost), salvage=Decimal(salv),
+                            useful_life_months=life, method=method,
+                            asset_account_code=acc,
+                            accum_account_code='1590',
+                            expense_account_code='7101')
+        # إثبات اقتنائه افتتاحياً بقيد موثق مقابل 8002 (اتفاق المخزون نفسه)
+        # ⇐ سجل الأصول يطابق الأستاذ من أول يوم معاينة
+        create_and_post_journal(
+            db, tenant_id=tid, branch_id=bid, journal_type='MANUAL',
+            entry_date=today,
+            narration=f'إثبات اقتناء أصل افتتاحي: {name}',
+            raw_lines=[
+                {'account': acc, 'debit': Decimal(cost), 'credit': 0,
+                 'description': f'تكلفة {a.code}'},
+                {'account': '8002', 'debit': 0, 'credit': Decimal(cost),
+                 'description': 'مقابل افتتاحي مرحلي'}],
+            actor_id='system-seed', source_type='FA_OPEN',
+            source_id=a.id, event_key=f'fa:open:seed:{a.code}')
+        n += 1
+    db.flush()
+    return {'assets': n}

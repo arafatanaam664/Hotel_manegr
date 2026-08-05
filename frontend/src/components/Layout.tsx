@@ -21,6 +21,9 @@ const NAV = [
   { to: '/hr/time', label: 'الوقت والحضور', icon: '⏰', perm: 'hr.view' },
   { to: '/hr/payroll', label: 'الرواتب والمسيرات', icon: '💰', perm: 'hr.view' },
   { to: '/hr/reports', label: 'تقارير التوظيف', icon: '📈', perm: 'hr.reports' },
+  { to: '/fin/assets', label: 'الأصول الثابتة', icon: '🏭', perm: 'fa.view' },
+  { to: '/fin/statements', label: 'القوائم المالية', icon: '🧾', perm: 'reports.view' },
+  { to: '/fin/close', label: 'الإقفال والفترات', icon: '🔐', perm: 'periods.close' },
   { to: '/accounts', label: 'دليل الحسابات', icon: '☷', perm: 'accounts.view' },
   { to: '/journals', label: 'القيود اليومية', icon: '✎', perm: 'journals.view' },
   { to: '/journals/new', label: 'قيد يدوي جديد', icon: '＋', perm: 'journals.manual' },
@@ -60,7 +63,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.6.0 — بوابات G1..G6 ✅
+          إصدار 0.7.0 — بوابات G1..G7 ✅
         </div>
       </aside>
 

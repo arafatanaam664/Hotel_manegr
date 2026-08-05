@@ -1973,3 +1973,57 @@ class HrPolicy(Base):
                                                    nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
+
+
+# ════════════════════════════════════════════════════════════════════
+# (ز) الأصول الثابتة — ملف 11 + حدث #24 (ملف 02)
+# ════════════════════════════════════════════════════════════════════
+class FaAsset(Base):
+    """أصل ثابت: سجل الإهلاك — الشراء/الإعدام بقيود يدوية موثقة (ADR)."""
+    __tablename__ = 'fa_assets'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(160))
+    category: Mapped[str] = mapped_column(String(60), default='')
+    purchase_date: Mapped[date] = mapped_column(Date)
+    cost: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    salvage: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                             default=Decimal('0'))
+    useful_life_months: Mapped[int] = mapped_column(Integer)
+    method: Mapped[str] = mapped_column(String(10), default='STRAIGHT')
+    asset_account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'))
+    accum_account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'))
+    expense_account_id: Mapped[str] = mapped_column(ForeignKey('accounts.id'))
+    depreciated_total: Mapped[Decimal] = mapped_column(
+        Numeric(19, 4), default=Decimal('0'))
+    last_run_month: Mapped[str | None] = mapped_column(String(7),
+                                                       nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default='ACTIVE')
+    disposed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    disposal_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+    __table_args__ = (UniqueConstraint('tenant_id', 'code', name='uq_fa_code'),)
+
+
+class FaDepreciationRun(Base):
+    """تشغيلة إهلاك شهرية واحدة لكل شهر — لقطة سطور صندوقة."""
+    __tablename__ = 'fa_depreciation_runs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    month: Mapped[str] = mapped_column(String(7))
+    lines: Mapped[list] = mapped_column(JSONType, default=list)
+    total: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                           default=Decimal('0'))
+    asset_count: Mapped[int] = mapped_column(Integer, default=0)
+    posted_entry_id: Mapped[str | None] = mapped_column(
+        ForeignKey('journal_entries.id'), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+    __table_args__ = (UniqueConstraint('tenant_id', 'month',
+                                       name='uq_fa_run_month'),)

@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
 
     # ── الموجِّهات ─────────────────────────────────────
     from .api import (accounting, auth, health, hotel, inventory, org, pos,
-                      reports, hr)
+                      reports, hr, assets)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(pos.router)
     app.include_router(inventory.router)
     app.include_router(hr.router)
+    app.include_router(assets.router)
 
     # ── الإقلاع: جداول + زرع ─────────────────────────────
     @app.on_event('startup')

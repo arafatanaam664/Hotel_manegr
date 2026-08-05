@@ -117,13 +117,22 @@ def create_and_post_journal(db: Session, *, tenant_id: str, branch_id: str,
                             narration: str, raw_lines: list[dict],
                             actor_id: str, source_type=None, source_id=None,
                             reference=None, event_key=None,
-                            currency: str = 'BASE') -> m.JournalEntry:
-    """إنشاء وترحيل قيد ذرياً — للأنواع MANUAL والآلية معاً."""
+                            currency: str = 'BASE',
+                            allow_soft: bool = False) -> m.JournalEntry:
+    """إنشاء وترحيل قيد ذرياً — للأنواع MANUAL والآلية معاً.
+
+    allow_soft=True يسمح بقيد تسوية يدوي داخل فترة SOFT_CLOSED فقط
+    (ملف 02 §5) — صلاحية periods.adjust تُفحص في طبقة API."""
     settings_base = db.execute(
         select(m.Tenant.base_currency).where(m.Tenant.id == tenant_id)).scalar_one()
     ccy = settings_base if currency == 'BASE' else currency
     period = period_for_date(db, tenant_id, entry_date)
-    if period.status != 'OPEN':  # V5
+    if period.status == 'OPEN':
+        pass
+    elif (period.status == 'SOFT_CLOSED' and allow_soft
+          and journal_type in ('MANUAL', 'CLOSING')):
+        pass  # تسوية الإدارة المالية في فترة لينة — V5 بصيغته الكاملة (02 §5)
+    else:
         raise PostingError('ACCOUNTING.CLOSED_PERIOD',
                            f'الفترة {period.period_no} {period.status} — يمنع الترحيل')
     if journal_type != 'MANUAL' and not source_type and not event_key:

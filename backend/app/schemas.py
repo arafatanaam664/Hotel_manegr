@@ -169,3 +169,121 @@ class AuditVerifyOut(BaseModel):
 
 
 TokenPair.model_rebuild()
+
+
+# ═══════════ ملف 02 §10 — القوائم المالية + الأصول (المرحلة 7) ═══════════
+class MoneyRow(BaseModel):
+    code: str
+    name: str
+    amount: Decimal
+
+
+class UsaliDeptOut(BaseModel):
+    key: str
+    name: str
+    revenues: list[MoneyRow]
+    expenses: list[MoneyRow]
+    revenue_total: Decimal
+    expense_total: Decimal
+    dept_income: Decimal
+
+
+class IncomeStatementOut(BaseModel):
+    from_: date = Field(alias='from')
+    to: date
+    method: str
+    departments: list[UsaliDeptOut]
+    departments_income: Decimal
+    other_revenue: list[MoneyRow]
+    other_revenue_total: Decimal
+    undistributed: list[MoneyRow]
+    undistributed_total: Decimal
+    gop: Decimal
+    non_operating: list[MoneyRow]
+    non_operating_total: Decimal
+    net_income: Decimal
+
+    model_config = {'populate_by_name': True}
+
+
+class BalanceSheetOut(BaseModel):
+    as_of: date
+    current_assets: list[MoneyRow]
+    fixed_assets: list[MoneyRow]
+    system_accounts: list[MoneyRow]
+    total_assets: Decimal
+    liabilities: list[MoneyRow]
+    total_liabilities: Decimal
+    equity: list[MoneyRow]
+    current_year_earnings: Decimal
+    total_equity: Decimal
+    balanced: bool
+    diff: Decimal
+
+
+class CashFlowOut(BaseModel):
+    from_: date = Field(alias='from')
+    to: date
+    method: str
+    net_income: Decimal
+    depreciation_addback: Decimal
+    delta_receivables: Decimal
+    delta_inventory: Decimal
+    delta_operating_liabilities: Decimal
+    operating: Decimal
+    delta_fixed_assets_gross: Decimal
+    investing: Decimal
+    delta_loans: Decimal
+    delta_owner_current: Decimal
+    delta_capital: Decimal
+    financing: Decimal
+    equity_and_system_transfers: Decimal
+    net_change: Decimal
+    cash_delta_actual: Decimal
+    reconciliation_diff: Decimal
+    identity_holds: bool
+
+    model_config = {'populate_by_name': True}
+
+
+class AgingRowOut(BaseModel):
+    party: str
+    party_name: str
+    party_type: str
+    buckets: dict[str, Decimal]
+    total: Decimal
+
+
+class AgingOut(BaseModel):
+    account: str
+    account_name: str
+    as_of: date
+    method: str
+    rows: list[AgingRowOut]
+    totals: dict[str, Decimal]
+    grand_total: Decimal
+    gl_balance: Decimal
+    matches_gl: bool
+
+
+class FaAssetIn(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    category: str = Field(default='', max_length=60)
+    purchase_date: date
+    cost: Decimal = Field(gt=0)
+    salvage: Decimal = Field(default=Decimal('0'), ge=0)
+    useful_life_months: int = Field(ge=1, le=600)
+    method: str = Field(default='STRAIGHT',
+                        pattern='^(STRAIGHT|DECLINING)$')
+    asset_account_code: str = Field(default='1510', max_length=10)
+    accum_account_code: str = Field(default='1590', max_length=10)
+    expense_account_code: str = Field(default='7101', max_length=10)
+
+
+class FaDisposeIn(BaseModel):
+    disposed_at: date
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class FaRunIn(BaseModel):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
