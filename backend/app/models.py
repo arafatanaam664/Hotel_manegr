@@ -663,6 +663,9 @@ class PosOutlet(Base):
     cost_center_code: Mapped[str] = mapped_column(String(16), default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # مستودع المنفذ في وحدة المخزون (ملف 04 §1 «مستودع افتراضي» — ADR-0017)
+    warehouse_id: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
 
     __table_args__ = (UniqueConstraint('tenant_id', 'code',
                                        name='uq_pos_outlet'),)
@@ -927,3 +930,648 @@ class PosPayment(Base):
                                                           nullable=True)
     house_reason: Mapped[str | None] = mapped_column(String(200),
                                                      nullable=True)
+
+
+# ════════════════════════════════════════════════════════════════════
+# وحدة المخزون والمشتريات — ملف 05 (INVENTORY_SPEC) كقانون ملزم
+# القواعد الحاكمة:
+# - متوسط مرجح متحرك لكل (صنف/مستودع) — ثابت القيمة: qty×avg = قيمة دفترية
+#   تساوي رصيد حساب المخزون في الأستاذ يومياً (قبول §7.2)
+# - كل حركة Append-Only في inv_moves (الكمية، التكلفة لحظتها، المستند،
+#   المستخدم، الدفعة/الصلاحية — §3)
+# - حساب المستودع المالي هو المرجع في قيود الحركة (§1: لكل مستودع حساب)
+# - GRN المرحَّل غير قابل للتعديل إطلاقاً — التصحيح بعكس + جديد (§2 قاعدة)
+# ════════════════════════════════════════════════════════════════════
+
+class InvCategory(Base):
+    """تصنيف أصناف (§1): أغذية/مشروبات/مستلزمات غرف/صيانة/قرطاسية...
+
+    valuation_method: AVG مدعوم فعلياً؛ FIFO محجوز ويُقفل بعد أول حركة
+    (§4) — تفعيله الفعلي مؤجل بقرار موثق (ADR-0018)."""
+    __tablename__ = 'inv_categories'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(12))
+    name_ar: Mapped[str] = mapped_column(String(120))
+    default_account_code: Mapped[str] = mapped_column(String(8),
+                                                      default='1210')
+    valuation_method: Mapped[str] = mapped_column(String(4), default='AVG')
+    method_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_inv_category'),)
+
+
+class InvItem(Base):
+    """صنف مخزون (§1): وحدة أساسية + بدائل بمعامل إلزامي، حد إعادة طلب
+    وحد أمان، حساب مخزون افتراضي، تتبع دفعات/صلاحية اختياري.
+    pos_item_id: جسر المرحلة 4 — صنف POS مخزوني ↔ صنف مخزون (ADR-0017)."""
+    __tablename__ = 'inv_items'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(16))
+    name_ar: Mapped[str] = mapped_column(String(160))
+    name_en: Mapped[str] = mapped_column(String(160), default='')
+    category_id: Mapped[str] = mapped_column(ForeignKey('inv_categories.id'))
+    base_unit: Mapped[str] = mapped_column(String(12), default='حبة')
+    alt_units: Mapped[list] = mapped_column(JSONType, default=list)
+    barcode: Mapped[str] = mapped_column(String(40), default='', index=True)
+    reorder_level: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    safety_level: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    inventory_account_code: Mapped[str] = mapped_column(String(8),
+                                                        default='1210')
+    track_expiry: Mapped[bool] = mapped_column(Boolean, default=False)
+    pos_item_id: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True,
+                                                    unique=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_inv_item'),)
+
+
+class InvWarehouse(Base):
+    """مستودع (§1): رئيسي/فرعي/منفذ POS؛ له حساب مخزون مالي (المشاركة
+    مسموحة) وأمين مسؤول (RBAC + عهدة)."""
+    __tablename__ = 'inv_warehouses'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(ForeignKey('branches.id'),
+                                           index=True)
+    code: Mapped[str] = mapped_column(String(12))
+    name_ar: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(8), default='SUB')  # MAIN|SUB|OUTLET
+    inventory_account_code: Mapped[str] = mapped_column(String(8),
+                                                        default='1210')
+    keeper_user_id: Mapped[str | None] = mapped_column(String(36),
+                                                       nullable=True)
+    allow_negative: Mapped[bool] = mapped_column(Boolean, default=False)
+    pos_outlet_id: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True,
+                                                      unique=True)
+    cost_center_code: Mapped[str] = mapped_column(String(16), default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_inv_warehouse'),)
+
+
+class InvStock(Base):
+    """رصيد (صنف/مستودع): الكمية + المتوسط المرجح المتحرك — يُحدَّثان
+    ذرّياً عبر محرك الحركة فقط، والخصم المحروس يمنع السالب (قبول §7.1)."""
+    __tablename__ = 'inv_stock'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'),
+                                         index=True)
+    qty_on_hand: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    avg_cost: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+
+    __table_args__ = (UniqueConstraint('warehouse_id', 'item_id',
+                                       name='uq_inv_stock'),)
+
+
+class InvMove(Base):
+    """سجل حركة إلحاقي (لا تعديل/حذف): الكمية الموقعة، التكلفة لحظتها،
+    المستند، المستخدم، الدفعة/الصلاحية (§3 حرفياً)."""
+    __tablename__ = 'inv_moves'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    warehouse_id: Mapped[str] = mapped_column(String(36), index=True)
+    item_id: Mapped[str] = mapped_column(String(36), index=True)
+    business_date: Mapped[date] = mapped_column(Date, index=True)
+    qty_delta: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    value_delta: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    reason: Mapped[str] = mapped_column(String(16), index=True)
+    # OPENING|PURCHASE|PURCHASE_REV|PURCHASE_RETURN|ISSUE_OUT|ISSUE_IN|
+    # TRANSFER_OUT|TRANSFER_IN|WASTE|COUNT_SHORT|COUNT_OVER|
+    # SALE_POS|POS_RETURN|ADJUST
+    ref_type: Mapped[str] = mapped_column(String(12), default='')
+    ref_id: Mapped[str] = mapped_column(String(36), default='', index=True)
+    batch_no: Mapped[str] = mapped_column(String(40), default='')
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    actor_id: Mapped[str] = mapped_column(String(36), default='')
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index('ix_inv_moves_wh_item', 'tenant_id',
+                            'warehouse_id', 'item_id'),)
+
+
+class InvSupplier(Base):
+    """مورد (§1): شروط سداد، عملة، تقييم أداء — ذمته على 2101 بمطابقة
+    الطرف SUPPLIER."""
+    __tablename__ = 'inv_suppliers'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(12))
+    name: Mapped[str] = mapped_column(String(160))
+    contact_person: Mapped[str] = mapped_column(String(80), default='')
+    phone: Mapped[str] = mapped_column(String(30), default='')
+    address: Mapped[str] = mapped_column(String(200), default='')
+    terms_days: Mapped[int] = mapped_column(Integer, default=0)
+    currency: Mapped[str] = mapped_column(String(3), default='BASE')
+    notes: Mapped[str] = mapped_column(String(300), default='')
+    rating_commitment: Mapped[int] = mapped_column(Integer, default=3)
+    rating_quality: Mapped[int] = mapped_column(Integer, default=3)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_inv_supplier'),)
+
+
+class InvSupplierPrice(Base):
+    """سعر تعاقدي مؤرخ (§1): من تاريخ/إلى تاريخ — يقترح على PO تلقائياً."""
+    __tablename__ = 'inv_supplier_prices'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    supplier_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_suppliers.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'),
+                                         index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    valid_from: Mapped[date] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    __table_args__ = (UniqueConstraint('supplier_id', 'item_id',
+                                       'valid_from', name='uq_inv_supprice'),)
+
+
+class InvPurchaseRequest(Base):
+    """طلب شراء داخلي اختياري (§2.1): من قسم → اعتماد حسب سقف."""
+    __tablename__ = 'inv_prs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    pr_no: Mapped[str] = mapped_column(String(24))
+    department: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(12), default='DRAFT',
+                                        index=True)
+    # DRAFT|SUBMITTED|APPROVED|REJECTED|CONVERTED
+    notes: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(String(300),
+                                                      nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'pr_no',
+                                       name='uq_inv_pr'),)
+
+
+class InvPRLine(Base):
+    __tablename__ = 'inv_pr_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    pr_id: Mapped[str] = mapped_column(ForeignKey('inv_prs.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    note: Mapped[str] = mapped_column(String(200), default='')
+
+
+class InvPurchaseOrder(Base):
+    """أمر شراء (§2.2): الاعتماد على سلم القيمة (ملف 14 §2):
+    ≤ حد الأمين L0 ذاتي | L1 مدير القسم | L2 مالية — لا اعتماد ذاتي."""
+    __tablename__ = 'inv_purchase_orders'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    po_no: Mapped[str] = mapped_column(String(24))
+    supplier_id: Mapped[str] = mapped_column(ForeignKey('inv_suppliers.id'),
+                                             index=True)
+    pr_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    expected_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    terms: Mapped[str] = mapped_column(String(200), default='')
+    status: Mapped[str] = mapped_column(String(16), default='DRAFT',
+                                        index=True)
+    # DRAFT|PENDING_L1|PENDING_L2|APPROVED|REJECTED|PART_RECEIVED|RECEIVED|CANCELLED
+    approve_level_required: Mapped[int] = mapped_column(Integer, default=0)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved1_by: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
+    approved1_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    approved2_by: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
+    approved2_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(String(300),
+                                                      nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'po_no',
+                                       name='uq_inv_po'),)
+
+
+class InvPOLine(Base):
+    """بند أمر شراء: الكمية بوحدة الشراء + المعامل إلزامي (§1 أدوات) —
+    base_qty = qty × factor هي مرجع الاستلام."""
+    __tablename__ = 'inv_po_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    po_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_purchase_orders.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    uom: Mapped[str] = mapped_column(String(12), default='حبة')
+    factor: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=1)
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    base_qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(19, 4))  # للأساسية
+    line_total: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    received_qty: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+
+
+class InvGRN(Base):
+    """سند استلام بضاعة (§2.3): بعد POSTED يصبح غير قابل للتعديل إطلاقاً
+    من كل المسارات (قبول §7.4) — التصحيح بعكس + سند جديد فقط."""
+    __tablename__ = 'inv_grns'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    grn_no: Mapped[str] = mapped_column(String(24))
+    po_id: Mapped[str | None] = mapped_column(String(36), nullable=True,
+                                              index=True)
+    supplier_id: Mapped[str] = mapped_column(ForeignKey('inv_suppliers.id'),
+                                             index=True)
+    warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    purchase_type: Mapped[str] = mapped_column(String(6), default='CASH')
+    supplier_invoice_no: Mapped[str] = mapped_column(String(40), default='')
+    payment_account_code: Mapped[str] = mapped_column(String(8),
+                                                      default='1101')
+    status: Mapped[str] = mapped_column(String(10), default='DRAFT',
+                                        index=True)  # DRAFT|POSTED|REVERSED
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reversal_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                          nullable=True)
+    note: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    posted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'grn_no',
+                                       name='uq_inv_grn'),)
+
+
+class InvGRNLine(Base):
+    """سطر استلام: مقبول = مستلم − مرفوض؛ فروقات الكمية بسقف٪ على PO (§2.3)."""
+    __tablename__ = 'inv_grn_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    grn_id: Mapped[str] = mapped_column(ForeignKey('inv_grns.id'),
+                                        index=True)
+    po_line_id: Mapped[str | None] = mapped_column(String(36),
+                                                   nullable=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty_ordered: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    qty_received: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    qty_rejected: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    reject_reason: Mapped[str | None] = mapped_column(String(200),
+                                                      nullable=True)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    line_total: Mapped[Decimal] = mapped_column(Numeric(19, 4))  # مقبول×سعر
+    batch_no: Mapped[str] = mapped_column(String(40), default='')
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class InvSupplierInvoice(Base):
+    """فاتورة مورد + مطابقة ثلاثية (§2.4): PO ↔ GRN ↔ Invoice؛ أي فرق
+    سعر/كمية خارج التسامح → VARIANCE_HOLD تلقائياً (قبول §7.3)."""
+    __tablename__ = 'inv_supplier_invoices'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    sinv_no: Mapped[str] = mapped_column(String(24))
+    supplier_invoice_no: Mapped[str] = mapped_column(String(40))
+    supplier_id: Mapped[str] = mapped_column(ForeignKey('inv_suppliers.id'),
+                                             index=True)
+    po_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    grn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    invoice_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(14), default='DRAFT',
+                                        index=True)
+    # DRAFT|MATCHED|VARIANCE_HOLD|APPROVED|PAID|CANCELLED
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    paid_amount: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    match_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    variance_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                          nullable=True)
+    variance_approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                             nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'sinv_no',
+                                       name='uq_inv_sinv'),
+                      UniqueConstraint('tenant_id', 'supplier_id',
+                                       'supplier_invoice_no',
+                                       name='uq_inv_sinv_ext'),)
+
+
+class InvSILine(Base):
+    __tablename__ = 'inv_si_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    sinv_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_supplier_invoices.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    line_total: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+
+
+class InvSupplierPayment(Base):
+    """سداد مورد (§2.5 / حدث #16): Dr 2101 طرف | Cr نقد/بنك، وخصم مكتسب
+    يُقيد دائناً 4901 دائماً. التخصيص على فواتير محددة + فائض ذمة."""
+    __tablename__ = 'inv_supplier_payments'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    pay_no: Mapped[str] = mapped_column(String(24))
+    supplier_id: Mapped[str] = mapped_column(ForeignKey('inv_suppliers.id'),
+                                             index=True)
+    payment_date: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(String(8), default='CASH')
+    account_code: Mapped[str] = mapped_column(String(8), default='1101')
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    discount: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    allocations: Mapped[list] = mapped_column(JSONType, default=list)
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'pay_no',
+                                       name='uq_inv_pay'),)
+
+
+class InvSupplierReturn(Base):
+    """مرتجع للمورد (§2.6 / حدث #17) بمستند مستقل: Dr 2101 أو 1101 |
+    Cr حساب المستودع — يخفض الرصيد بالمتوسط المتحرك لحظتها."""
+    __tablename__ = 'inv_supplier_returns'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    srt_no: Mapped[str] = mapped_column(String(24))
+    supplier_id: Mapped[str] = mapped_column(ForeignKey('inv_suppliers.id'),
+                                             index=True)
+    warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    grn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    refund_to: Mapped[str] = mapped_column(String(10), default='CREDIT_AP')
+    status: Mapped[str] = mapped_column(String(10), default='DRAFT',
+                                        index=True)  # DRAFT|POSTED
+    total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'srt_no',
+                                       name='uq_inv_srt'),)
+
+
+class InvSRTLine(Base):
+    __tablename__ = 'inv_srt_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    srt_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_supplier_returns.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    line_total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+
+
+class InvIssue(Base):
+    """صرف مواد لقسم (§3 / حدث #18): طلب ← اعتماد ← صرف؛ تحويل بين
+    مستودعات بلا أثر دخل (القيد فقط إن اختلف حسابا المستودعين)."""
+    __tablename__ = 'inv_issues'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    iss_no: Mapped[str] = mapped_column(String(24))
+    from_warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    to_warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'))
+    department: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(12), default='REQUESTED',
+                                        index=True)
+    # REQUESTED|APPROVED|REJECTED|ISSUED
+    reason: Mapped[str] = mapped_column(String(300), default='')
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    issued_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    issued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'iss_no',
+                                       name='uq_inv_issue'),)
+
+
+class InvIssueLine(Base):
+    __tablename__ = 'inv_issue_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey('inv_issues.id'),
+                                          index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                      nullable=True)
+    line_value: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                       nullable=True)
+
+
+class InvTransfer(Base):
+    """تحويل بين مستودعات بمسوغ (§3): «على الطريق» للاستلام اللاحق
+    (requires_receive) — الخصم عند الشحن والإضافة عند الاستلام."""
+    __tablename__ = 'inv_transfers'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    trf_no: Mapped[str] = mapped_column(String(24))
+    from_warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    to_warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'))
+    requires_receive: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(12), default='DRAFT',
+                                        index=True)
+    # DRAFT|IN_TRANSIT|RECEIVED|CANCELLED
+    reason: Mapped[str] = mapped_column(String(300))
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    dispatched_by: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    received_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'trf_no',
+                                       name='uq_inv_trf'),)
+
+
+class InvTransferLine(Base):
+    __tablename__ = 'inv_transfer_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    transfer_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_transfers.id'), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                      nullable=True)
+
+
+class InvWaste(Base):
+    """هالك/تالف (§3 / حدث #19): مستند + صورة + اعتماد + سبب؛ إحصائية
+    شهرية من حركات WASTE."""
+    __tablename__ = 'inv_waste'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    wst_no: Mapped[str] = mapped_column(String(24))
+    warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    status: Mapped[str] = mapped_column(String(10), default='DRAFT',
+                                        index=True)  # DRAFT|PENDING|POSTED|REJECTED
+    reason: Mapped[str] = mapped_column(String(300))
+    photo_ref: Mapped[str] = mapped_column(String(200), default='')
+    total_value: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    entry_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(String(300),
+                                                      nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'wst_no',
+                                       name='uq_inv_wst'),)
+
+
+class InvWasteLine(Base):
+    __tablename__ = 'inv_waste_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    waste_id: Mapped[str] = mapped_column(ForeignKey('inv_waste.id'),
+                                          index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    qty: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    line_value: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    line_reason: Mapped[str] = mapped_column(String(200), default='')
+
+
+class InvCount(Base):
+    """جرد دوري (§4): تجميد الحركة على النطاق ← عدّ ← فروقات ← اعتماد
+    مزدوج (ملف 14: أمين+مالية ثم مدير عام) ← تسويات #19/#20 بالهللة
+    (قبول §7.5). الجرد الشامل إلزامي قبل الإقفال السنوي."""
+    __tablename__ = 'inv_counts'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    cnt_no: Mapped[str] = mapped_column(String(24))
+    warehouse_id: Mapped[str] = mapped_column(
+        ForeignKey('inv_warehouses.id'), index=True)
+    category_id: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default='FREEZE',
+                                        index=True)
+    # FREEZE|COUNTED|PENDING_L1|PENDING_L2|POSTED|CANCELLED
+    short_value: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    over_value: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    short_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                       nullable=True)
+    over_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    counted_by: Mapped[str | None] = mapped_column(String(36),
+                                                   nullable=True)
+    counted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    approved1_by: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
+    approved1_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    approved2_by: Mapped[str | None] = mapped_column(String(36),
+                                                     nullable=True)
+    approved2_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (UniqueConstraint('tenant_id', 'cnt_no',
+                                       name='uq_inv_cnt'),)
+
+
+class InvCountLine(Base):
+    __tablename__ = 'inv_count_lines'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    count_id: Mapped[str] = mapped_column(ForeignKey('inv_counts.id'),
+                                          index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey('inv_items.id'))
+    system_qty: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    counted_qty: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                        nullable=True)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    variance_qty: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                         nullable=True)
+    variance_value: Mapped[Decimal | None] = mapped_column(Numeric(19, 4),
+                                                           nullable=True)
+
+
+class InvPolicy(Base):
+    """سياسة الوحدة القابلة للضبط (ملف 14 §2 «قابلة للضبط»):
+    سلم اعتمادات الشراء، تسامح المطابقة والاستلام، نوافذ التنبيه."""
+    __tablename__ = 'inv_policy'
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    po_l0_limit: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                 default=5000)
+    po_l1_limit: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                 default=50000)
+    price_tolerance_pct: Mapped[Decimal] = mapped_column(Numeric(7, 4),
+                                                         default=0)
+    qty_tolerance_pct: Mapped[Decimal] = mapped_column(Numeric(7, 4),
+                                                       default=5)
+    expiry_windows: Mapped[list] = mapped_column(JSONType,
+                                                 default=lambda: [30, 15, 7])
+    stagnant_days: Mapped[int] = mapped_column(Integer, default=90)
+    consumption_days: Mapped[int] = mapped_column(Integer, default=30)
+    updated_by: Mapped[str | None] = mapped_column(String(36),
+                                                   nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)

@@ -20,6 +20,10 @@ import PosOrders from './pages/PosOrders'
 import PosShifts from './pages/PosShifts'
 import PosCatalog from './pages/PosCatalog'
 import PosReports from './pages/PosReports'
+import InvCatalog from './pages/InvCatalog'
+import InvPurchasing from './pages/InvPurchasing'
+import InvOperations from './pages/InvOperations'
+import InvReports from './pages/InvReports'
 
 export default function App() {
   const { session } = useAuth()
@@ -45,6 +49,10 @@ export default function App() {
         <Route path="pos/shifts" element={<PosShifts />} />
         <Route path="pos/catalog" element={<PosCatalog />} />
         <Route path="pos/reports" element={<PosReports />} />
+        <Route path="inv/catalog" element={<InvCatalog />} />
+        <Route path="inv/purchasing" element={<InvPurchasing />} />
+        <Route path="inv/operations" element={<InvOperations />} />
+        <Route path="inv/reports" element={<InvReports />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
         <Route path="journals/new" element={<JournalNew />} />

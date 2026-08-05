@@ -310,67 +310,73 @@ def cancel_order(db: Session, *, tenant_id: str, order: m.PosOrder,
 
 # ────────────────────────────────────────────────────────────────────
 # المخزون التشغيلي — خصم #13 وقت التسديد بالضبط (§3 قواعد صارمة)
+# ADR-0017 (المرحلة 5): دفتر المخزون الموحّد في app/inventory.py هو مصدر
+# الحقيقة؛ مستودع المنفذ (OUTLET) يخصم بالمتوسط المرجح المتحرك لحظة البيع
+# (ملف 05 §4: قيد التكلفة بتكلفة لحظة البيع المخزنة على سطره).
 # ────────────────────────────────────────────────────────────────────
-def _stock_row(db: Session, tenant_id: str, outlet_id: str,
-               item_id: str) -> m.PosStock:
-    row = db.execute(select(m.PosStock).where(
-        m.PosStock.outlet_id == outlet_id,
-        m.PosStock.item_id == item_id).with_for_update()).scalar_one_or_none()
-    if row is None:
-        row = m.PosStock(id=new_uuid(), tenant_id=tenant_id,
-                         outlet_id=outlet_id, item_id=item_id,
-                         qty_on_hand=Decimal('0'))
-        db.add(row)
-        db.flush()
-    return row
+def _inv_for_pos_item(db: Session, tenant_id: str, pos_item_id: str) -> m.InvItem:
+    from . import inventory as inv_mod
+    pos_item = db.get(m.PosItem, pos_item_id)
+    if pos_item is None:
+        err('POS.UNKNOWN_ITEM', f'صنف بيع غير موجود: {pos_item_id}')
+    return inv_mod.auto_link_pos_item(db, tenant_id=tenant_id,
+                                      pos_item=pos_item)
 
 
 def _deduct_stock(db: Session, *, tenant_id: str, outlet: m.PosOutlet,
                   item_id: str, qty: Decimal, actor_id: str,
                   ref_id: str) -> tuple[Decimal, bool]:
-    """يخصم الكمية ويرجع (التكلفة الممتدة، نُقص بالسالب مسموح)."""
-    stock = _stock_row(db, tenant_id, outlet.id, item_id)
-    item = db.get(m.PosItem, item_id)
-    new_qty = D(stock.qty_on_hand) - qty
-    went_negative = new_qty < 0
-    if went_negative and not outlet.allow_negative_stock:
-        err('POS.INSUFFICIENT_STOCK',
-            f'رصيد «{item.name_ar}» لا يكفي: متاح {stock.qty_on_hand} والمطلوب {qty}')
-    stock.qty_on_hand = new_qty
-    cost = D(item.cost) if item else Decimal('0')
-    db.add(m.PosStockMove(id=new_uuid(), tenant_id=tenant_id,
-                          outlet_id=outlet.id, item_id=item_id,
-                          qty_delta=-qty, unit_cost=cost, reason='SALE',
-                          ref_id=ref_id, actor_id=actor_id,
-                          created_at=utcnow()))
-    return (cost * qty).quantize(Decimal('0.0001')), went_negative
+    """يخصم الكمية من مستودع المنفذ بالمتوسط المتحرك لحظتها ويرجع
+    (التكلفة الممتدة الفعلية، نُقص بالسالب مسموح) — الخصم ذري محروس."""
+    from . import inventory as inv_mod
+    wh = inv_mod.outlet_warehouse(db, tenant_id, outlet)
+    inv_item = _inv_for_pos_item(db, tenant_id, item_id)
+    bd = get_business_date(db, tenant_id)
+    try:
+        mv, applied, went_negative = inv_mod.apply_outbound(
+            db, tenant_id=tenant_id, warehouse=wh, item_id=inv_item.id,
+            qty=qty, reason='SALE_POS', ref_type='POS', ref_id=ref_id,
+            actor_id=actor_id, bd=bd,
+            allow_negative=outlet.allow_negative_stock)
+    except Exception as exc:
+        if isinstance(exc, PostingError) and \
+                exc.code == 'INV.INSUFFICIENT_STOCK':
+            item = db.get(m.PosItem, item_id)
+            raise PostingError(
+                'POS.INSUFFICIENT_STOCK',
+                f'رصيد «{item.name_ar if item else item_id}» لا يكفي — {exc.message}')
+        raise
+    return (applied * qty).quantize(Decimal('0.0001')), went_negative
 
 
 def load_stock(db: Session, *, tenant_id: str, outlet: m.PosOutlet,
                item_id: str, qty, unit_cost, actor_id: str,
-               event_key: str | None = None) -> m.PosStock:
-    """إدخال رصيد (فتح/توريد مبسّط) — أثر محاسبي STOCK_OPEN_POS عبر المحرك."""
+               event_key: str | None = None) -> dict:
+    """إدخال رصيد (فتح/توريد مبسّط) — أثر محاسبي STOCK_OPEN_POS عبر المحرك
+    وإدخال لدفتر المخزون الموحد بالتكلفة نفسها (ثبات القيمة)."""
+    from . import inventory as inv_mod
     item = item_or_err(db, tenant_id, item_id)
     qty, unit_cost = D(qty), D(unit_cost)
     if qty <= 0 or unit_cost < 0:
         err('POS.BAD_STOCK', 'كمية/تكلفة الإدخال غير صالحة')
-    stock = _stock_row(db, tenant_id, outlet.id, item_id)
-    stock.qty_on_hand = D(stock.qty_on_hand) + qty
-    db.add(m.PosStockMove(id=new_uuid(), tenant_id=tenant_id,
-                          outlet_id=outlet.id, item_id=item_id,
-                          qty_delta=qty, unit_cost=unit_cost, reason='OPEN',
-                          ref_id=event_key or '', actor_id=actor_id,
-                          created_at=utcnow()))
+    wh = inv_mod.outlet_warehouse(db, tenant_id, outlet)
+    inv_item = _inv_for_pos_item(db, tenant_id, item_id)
+    bd = get_business_date(db, tenant_id)
     if qty * unit_cost > 0:
-        bd = get_business_date(db, tenant_id)
         post_event(db, tenant_id=tenant_id, branch_code='MAIN',
                    event_type='STOCK_OPEN_POS',
                    event_key=event_key or f'posstock:load:{outlet.code}:{item.code}:{new_uuid()}',
                    entry_date=bd, amounts={'amount': str(qty * unit_cost)},
                    actor_id=actor_id,
                    narration=f'إدخال مخزون {item.name_ar} × {qty} @ {unit_cost}')
+    mv, _ = inv_mod.apply_inbound(
+        db, tenant_id=tenant_id, warehouse=wh, item_id=inv_item.id,
+        qty=qty, unit_cost=unit_cost, reason='OPENING', ref_type='POS_LOAD',
+        ref_id=event_key or new_uuid(), actor_id=actor_id, bd=bd)
     db.flush()
-    return stock
+    stock = inv_mod._stock_row(db, tenant_id, wh.id, inv_item.id)
+    return {'item_id': item_id, 'pos_item_code': item.code,
+            'qty_on_hand': D(stock.qty_on_hand)}
 
 
 def invoice_components(db: Session, tenant_id: str,
@@ -620,13 +626,20 @@ def settle_order(db: Session, *, tenant_id: str, actor_id: str,
         source_type='POS_INVOICE', source_id=invoice_id,
         reference=inv_no, event_key=f'pos:sale:{client_uuid}')
 
-    # #13: خصم المكونات بالوصفة بالضبط + قيد التكلفة (مخزوني/مركّب فقط)
-    comps, cost_total = invoice_components(db, tenant_id, lines)
+    # #13: خصم المكونات بالوصفة بالضبط + قيد التكلفة الفعلية بالمتوسط
+    # المتحرك لحظة البيع (ملف 05 §4) — مخزوني/مركّب فقط
+    comps, _ = invoice_components(db, tenant_id, lines)
     negatives = []
+    cost_total = Decimal('0')
+    comp_cost: dict[str, Decimal] = {}   # pos_item_id ← متوسط التكلفة المطبق
     for c in comps:
-        _, neg = _deduct_stock(db, tenant_id=tenant_id, outlet=outlet,
-                               item_id=c['item_id'], qty=c['qty'],
-                               actor_id=actor_id, ref_id=invoice_id)
+        cost_i, neg = _deduct_stock(db, tenant_id=tenant_id, outlet=outlet,
+                                    item_id=c['item_id'], qty=c['qty'],
+                                    actor_id=actor_id, ref_id=invoice_id)
+        cost_total += cost_i
+        if c['qty'] > 0:
+            comp_cost[str(c['item_id'])] = (cost_i / c['qty']).quantize(
+                Decimal('0.0001'))
         if neg:
             negatives.append(c['name'])
     cogs_entry = None
@@ -639,10 +652,26 @@ def settle_order(db: Session, *, tenant_id: str, actor_id: str,
             narration=f'تكلفة فاتورة {inv_no}')
 
     # الفاتورة + السندات (Snapshot كامل — إيصالات §5 ومرتجعات §3.4)
+    # تكلفة الوحدة تُخزَّن على السطر نفسه: قيد التكلفة لا يُعاد حسابه
+    # أثراً رجعياً حتى مع تغيّر المتوسط لاحقاً (ملف 05 §4 حرفياً)
+    def _line_unit_cost(ln: m.PosOrderLine) -> str | None:
+        it = db.get(m.PosItem, ln.item_id)
+        if it is None or it.item_type == 'SERVICE':
+            return None
+        if it.item_type == 'STOCK':
+            c = comp_cost.get(str(it.id))
+            return str(c) if c is not None else None
+        total_c = Decimal('0')
+        for r in db.execute(select(m.PosRecipe).where(
+                m.PosRecipe.parent_item_id == it.id)).scalars().all():
+            total_c += D(r.qty) * comp_cost.get(str(r.component_item_id),
+                                                Decimal('0'))
+        return str(total_c.quantize(Decimal('0.0001')))
     snap = [{'item_id': ln.item_id, 'item': ln.item_name, 'qty': str(ln.qty),
              'unit_price': str(ln.unit_price), 'modifiers': ln.modifiers,
              'notes': ln.notes, 'total': str(ln.line_total),
-             'discount': str(ln.discount)}
+             'discount': str(ln.discount),
+             'unit_cost': _line_unit_cost(ln)}
             for ln in lines]
     inv = m.PosInvoice(
         id=invoice_id, tenant_id=tenant_id, outlet_id=outlet.id,
@@ -713,18 +742,32 @@ def return_invoice(db: Session, *, tenant_id: str, actor_id: str,
         reverse_entry(db, tenant_id=tenant_id, entry_id=src.cogs_entry_id,
                       reason=f'مرتجع تكلفة {src.invoice_no}', actor_id=actor_id,
                       reversal_date=get_business_date(db, tenant_id))
-    # إعادة المخزون (حركة موجبة بسعر التكلفة الأصلي من سجل الحركات)
+    # إعادة المخزون (حركة موجبة بسعر التكلفة الأصلي من دفتر المخزون
+    # الموحد؛ مع سقوط توافقي لسجل المرحلة 4 القديم إن وجد)
+    from . import inventory as inv_mod
     outlet = db.get(m.PosOutlet, src.outlet_id)
-    for mv in db.execute(select(m.PosStockMove).where(
-            m.PosStockMove.ref_id == src.id,
-            m.PosStockMove.reason == 'SALE')).scalars().all():
-        stock = _stock_row(db, tenant_id, src.outlet_id, mv.item_id)
-        stock.qty_on_hand = D(stock.qty_on_hand) + (-mv.qty_delta)
-        db.add(m.PosStockMove(id=new_uuid(), tenant_id=tenant_id,
-                              outlet_id=src.outlet_id, item_id=mv.item_id,
-                              qty_delta=-mv.qty_delta, unit_cost=mv.unit_cost,
-                              reason='RETURN', ref_id=src.id,
-                              actor_id=actor_id, created_at=utcnow()))
+    wh = inv_mod.outlet_warehouse(db, tenant_id, outlet)
+    bd_rtn = get_business_date(db, tenant_id)
+    restored = 0
+    for mv in db.execute(select(m.InvMove).where(
+            m.InvMove.ref_id == src.id,
+            m.InvMove.reason == 'SALE_POS')).scalars().all():
+        inv_mod.apply_inbound(db, tenant_id=tenant_id, warehouse=wh,
+                              item_id=mv.item_id, qty=-mv.qty_delta,
+                              unit_cost=mv.unit_cost, reason='POS_RETURN',
+                              ref_type='POS', ref_id=src.id,
+                              actor_id=actor_id, bd=bd_rtn)
+        restored += 1
+    if restored == 0:  # فاتورة مرحلة 4 قديمة (سجل pos_stock_moves)
+        for mv in db.execute(select(m.PosStockMove).where(
+                m.PosStockMove.ref_id == src.id,
+                m.PosStockMove.reason == 'SALE')).scalars().all():
+            inv_item = _inv_for_pos_item(db, tenant_id, mv.item_id)
+            inv_mod.apply_inbound(db, tenant_id=tenant_id, warehouse=wh,
+                                  item_id=inv_item.id, qty=-mv.qty_delta,
+                                  unit_cost=mv.unit_cost, reason='POS_RETURN',
+                                  ref_type='POS', ref_id=src.id,
+                                  actor_id=actor_id, bd=bd_rtn)
     shift = open_shift_or_err(db, tenant_id, src.outlet_id,
                               shift_id=None)  # المرتجع ضمن وردية مفتوحة
     bd = get_business_date(db, tenant_id)

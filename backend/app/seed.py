@@ -71,6 +71,7 @@ COA = [
  ('5101', 'تكلفة مبيعات الأغذية والمشروبات', '5000', 'COGS', 'DEBIT', True, False, False),
  ('5102', 'تكلفة مستلزمات الغرف المستهلكة', '5000', 'COGS', 'DEBIT', True, False, False),
  ('5110', 'تكلفة خدمات خارجية لصالح نزيل', '5000', 'COGS', 'DEBIT', True, False, False),
+ ('5120', 'فروقات أسعار الشراء', '5000', 'COGS', 'DEBIT', True, False, False),
  ('6000', 'مصروفات تشغيلية', None, 'EXPENSE', 'DEBIT', False, False, True),
  ('6100', 'مصروفات قسم الغرف', '6000', 'EXPENSE', 'DEBIT', False, False, True),
  ('6110', 'رواتب الاستقبال والهوسكيبينج', '6100', 'EXPENSE', 'DEBIT', True, False, False),
@@ -118,13 +119,28 @@ POS_SUPERVISOR_EXTRA = ['pos.void', 'pos.approve', 'pos.return',
                         'pos.catalog.manage', 'pos.tables.manage',
                         'pos.stock.manage']
 
+# صلاحيات المخزون والمشتريات (ملف 05 + سلم اعتمادات ملف 14 §2)
+INV_VIEW = ['inv.view', 'inv.reports', 'inv.alerts']
+INV_KEEPER_WORK = ['inv.grn.manage', 'inv.transfer.manage',
+                   'inv.waste.create', 'inv.count.manage',
+                   'inv.issue.approve', 'inv.pr.create']
+INV_PURCHASER_WORK = ['inv.suppliers.manage', 'inv.pr.create',
+                      'inv.po.create', 'inv.invoice.create',
+                      'inv.return.manage']
+INV_FINANCE = ['inv.po.approve.l2', 'inv.invoice.approve',
+               'inv.variance.approve', 'inv.pay', 'inv.waste.approve',
+               'inv.count.approve.l1', 'inv.policy.manage']
+INV_GM = ['inv.catalog.manage', 'inv.pr.approve',
+          'inv.po.approve.l1', 'inv.issue.approve', 'inv.count.approve.l2',
+          'inv.grn.reverse', 'inv.issue.create']
+
 ROLES = [
  ('OWNER', 'مالك', 'كل الصلاحيات', ['*']),
  ('GM', 'مدير عام', 'إدارة التشغيل والتقارير والاعتمادات',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.post',
    'journals.reverse', 'periods.close', 'settings.manage']
   + HOTEL_OPS_PERMS + FRONTDESK_WORK + POS_OPS_PERMS + POS_WORK
-  + POS_SUPERVISOR_EXTRA
+  + POS_SUPERVISOR_EXTRA + INV_VIEW + INV_GM
   + ['corporates.manage', 'checkout.credit_transfer', 'discounts.approve',
      'nightaudit.run', 'hk.manage', 'rooms.manage', 'rates.manage',
      'extras.manage', 'checkin.dirty_override', 'audit.view']),
@@ -132,15 +148,17 @@ ROLES = [
   ['reports.view', 'accounts.view', 'accounts.manage', 'journals.view',
    'journals.manual', 'journals.post', 'journals.reverse', 'periods.close']
   + HOTEL_OPS_PERMS + POS_OPS_PERMS + ['pos.stock.manage']
+  + INV_VIEW + INV_FINANCE
   + ['discounts.approve', 'checkout.credit_transfer', 'corporates.manage',
      'folio.view']),
  ('ACCOUNTANT', 'محاسب', 'إدخال ومراجعة',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.manual',
-   'reports.hotel', 'folio.view', 'pos.reports', 'pos.zreport.view']),
+   'reports.hotel', 'folio.view', 'pos.reports', 'pos.zreport.view']
+  + INV_VIEW),
  ('AUDITOR', 'مدقق داخلي', 'قراءة وتدقيق فقط',
   ['reports.view', 'accounts.view', 'journals.view', 'audit.view',
    'reports.hotel', 'folio.view', 'frontdesk.view', 'pos.view',
-   'pos.reports', 'pos.zreport.view']),
+   'pos.reports', 'pos.zreport.view'] + INV_VIEW),
  ('RECEPTIONIST', 'موظف استقبال', 'حجوزات وتسكين وتحصيل',
   HOTEL_OPS_PERMS + FRONTDESK_WORK + ['folio.discount']),
  ('NIGHT_AUDITOR', 'مدقق ليلي', 'إجراء إقفال يوم العمل',
@@ -154,6 +172,12 @@ ROLES = [
  ('POS_SUPERVISOR', 'مشرف نقاط بيع',
   'إلغاء البنود، اعتماد الخصومات والمجاني، إدارة الكتالوج والمخزون',
   POS_OPS_PERMS + POS_WORK + POS_SUPERVISOR_EXTRA),
+ ('STORE_KEEPER', 'أمين مخزن',
+  'استلام وصرف وتحويل وجرد المستودعات (عهدة ومسؤولية — ملف 05 §1)',
+  INV_VIEW + INV_KEEPER_WORK),
+ ('PURCHASING', 'مسؤول مشتريات',
+  'الموردون وأوامر الشراء وفواتيرهم ومرتجعاتهم حتى باب الاعتماد',
+  INV_VIEW + INV_PURCHASER_WORK),
 ]
 
 POSTING_MAPS = [
@@ -424,6 +448,53 @@ POS_STOCK_OPEN = [
  ('CAFE', 'SODA', 80, 0.7),
 ]
 
+# ════════════════════════════════════════════════════════════════════
+# بيانات زرع المخزون والمشتريات التجريبية — ملف 05 §1
+# ════════════════════════════════════════════════════════════════════
+INV_CATEGORIES = [  # (code, name_ar, default_account)
+ ('FB', 'أغذية ومشروبات', '1210'),
+ ('ROOM', 'مستلزمات تشغيل الغرف', '1220'),
+ ('MAINT', 'صيانة وقطع غيار', '1230'),
+ ('STAT', 'قرطاسية ومطبوعات', '1210'),
+]
+
+INV_WAREHOUSES = [  # (code, name_ar, kind, account, cost_center)
+ ('MAIN-WH', 'المستودع الرئيسي', 'MAIN', '1210', ''),
+ ('KIT-WH', 'مستودع المطبخ', 'SUB', '1240', 'CC-FB'),
+ ('HK-WH', 'مستودع الطوابق', 'SUB', '1220', 'CC-ROOMS'),
+ ('MNT-WH', 'مستودع الصيانة', 'SUB', '1230', 'CC-MNT'),
+]
+
+# أصناف تشغيلية غير مرتبطة بـ POS: (code, name_ar, name_en, category,
+#   base_unit, alt_units, reorder, safety, account, track_expiry)
+INV_ITEMS = [
+ ('AMENITY-KIT', 'عدة ضيافة للغرفة', 'Guest Amenity Kit', 'ROOM', 'عدة',
+  [{'unit': 'كرتون', 'factor': '24'}], 100, 150, '1220', False),
+ ('BED-SHEET', 'شرشف سرير مزدوج', 'Bed Sheet Double', 'ROOM', 'قطعة',
+  [], 30, 50, '1220', False),
+ ('DETERG-L', 'منظف غسيل مركز (لتر)', 'Detergent Litre', 'MAINT', 'لتر',
+  [{'unit': 'جالون', 'factor': '4'}], 20, 40, '1230', True),
+]
+
+# رصيد افتتاحي للمستودعات التشغيلية: (warehouse, item, qty, unit_cost)
+INV_STOCK_OPEN = [
+ ('HK-WH', 'AMENITY-KIT', 500, '2'),
+ ('HK-WH', 'BED-SHEET', 120, '6.5'),
+ ('MNT-WH', 'DETERG-L', 40, '4.5'),
+]
+
+INV_SUPPLIERS = [  # (code, name, contact, phone, terms_days)
+ ('SUP-001', 'شركة المؤن المتحدة', 'أ. سالم الحميري', '777100100', 30),
+ ('SUP-002', 'مؤسسة البركة للتوريدات', 'أ. منى العيني', '777200200', 15),
+]
+
+# أسعار تعاقدية افتتاحية: (supplier, item_code, price)
+INV_SUPPLIER_PRICES = [
+ ('SUP-001', 'BUN', '0.32'), ('SUP-001', 'BEEF-PAT', '2.1'),
+ ('SUP-001', 'CHEESE-SL', '0.28'), ('SUP-001', 'FRIES-PT', '0.75'),
+ ('SUP-002', 'AMENITY-KIT', '1.9'), ('SUP-002', 'DETERG-L', '4.2'),
+]
+
 
 def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                   admin_password: str) -> dict:
@@ -490,6 +561,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                             effective_to=None))
     seed_hotel(db, tid, bid)
     seed_pos(db, tid, bid)
+    seed_inv(db, tid, bid)
 
     # أدوار ومستخدم مدير
     role_ids = {}
@@ -716,8 +788,220 @@ def seed_pos(db: Session, tid: str, bid: str) -> dict:
     return added
 
 
+def ensure_coa_upgrade(db: Session) -> int:
+    """يضيف حسابات الدليل الناقصة لقاعدة قائمة بالكود (مثل 5120 للمرحلة 5)
+    دون المساس بأي حساب موجود أو أرصدة — إدخال idempotent."""
+    tenant = db.execute(select(m.Tenant).limit(1)).scalar_one_or_none()
+    if tenant is None:
+        return 0
+    ids = {c: i for c, i in db.execute(
+        select(m.Account.code, m.Account.id).where(
+            m.Account.tenant_id == tenant.id)).all()}
+    added = 0
+    for code, name, parent, typ, nature, postable, party_req, is_sys in COA:
+        if code in ids:
+            continue
+        lvl = 1 if parent is None else (
+            2 if len(parent) == 4 and parent.endswith('000') else 3)
+        aid = new_uuid()
+        db.add(m.Account(id=aid, tenant_id=tenant.id, code=code,
+                         name_ar=name, parent_id=ids.get(parent), level=lvl,
+                         type=typ, nature=nature, is_postable=postable,
+                         party_required=party_req, is_system=is_sys))
+        ids[code] = aid
+        added += 1
+    db.flush()
+    return added
+
+
+# ════════════════════════════════════════════════════════════════════
+# زرع وحدة المخزون والمشتريات — ملف 05 §1 (إدخالات idempotent)
+# ════════════════════════════════════════════════════════════════════
+def seed_inv(db: Session, tid: str, bid: str) -> dict:
+    """تصنيفات/مستودعات/أصناف/موردون + جسر ADR-0017:
+    - مستودع OUTLET لكل منفذ POS وربطه (مستودع افتراضي — ملف 04 §1)
+    - صنف مخزون لكل صنف POS مخزوني وربطه (الوصفة تستهلك من المخزون)
+    - ترحيل الأرصدة الافتتاحية من pos_stock إلى دفتر المخزون كحركات
+      OPENING بدون قيد جديد: قيد STOCK_OPEN_POS نُشر أصلاً بنفس القيم
+      الزمنية، فثبات القيمة qty×avg = الأستاذ محفوظ من أول يوم (قبول §7.2)
+    - أرصدة افتتاحية للمستودعات التشغيلية بقيد افتتاحي عبر المحرك"""
+    from . import inventory as inv_mod
+    from .posting import create_and_post_journal
+    added = {'categories': 0, 'warehouses': 0, 'items': 0, 'suppliers': 0,
+             'stock_migrated': 0, 'stock_opened': 0}
+    today = date.today()
+
+    cat_ids = {}
+    for code, name, acct in INV_CATEGORIES:
+        row = db.execute(select(m.InvCategory).where(
+            m.InvCategory.tenant_id == tid,
+            m.InvCategory.code == code)).scalar_one_or_none()
+        if not row:
+            row = m.InvCategory(id=new_uuid(), tenant_id=tid, code=code,
+                                name_ar=name, default_account_code=acct)
+            db.add(row)
+            db.flush()
+            added['categories'] += 1
+        cat_ids[code] = row.id
+
+    wh_ids = {}
+    for code, name, kind, acct, cc in INV_WAREHOUSES:
+        row = db.execute(select(m.InvWarehouse).where(
+            m.InvWarehouse.tenant_id == tid,
+            m.InvWarehouse.code == code)).scalar_one_or_none()
+        if not row:
+            row = m.InvWarehouse(id=new_uuid(), tenant_id=tid, branch_id=bid,
+                                 code=code, name_ar=name, kind=kind,
+                                 inventory_account_code=acct,
+                                 cost_center_code=cc)
+            db.add(row)
+            db.flush()
+            added['warehouses'] += 1
+        wh_ids[code] = row.id
+
+    # جسر منافذ POS ← مستودعات OUTLET مربوطة
+    for outlet in db.execute(select(m.PosOutlet).where(
+            m.PosOutlet.tenant_id == tid)).scalars().all():
+        w = db.execute(select(m.InvWarehouse).where(
+            m.InvWarehouse.tenant_id == tid,
+            m.InvWarehouse.pos_outlet_id == outlet.id)).scalar_one_or_none()
+        if w is None:
+            w = m.InvWarehouse(id=new_uuid(), tenant_id=tid, branch_id=bid,
+                               code=f'POS-{outlet.code}',
+                               name_ar=f'مستودع {outlet.name_ar}',
+                               kind='OUTLET', inventory_account_code='1210',
+                               allow_negative=outlet.allow_negative_stock,
+                               pos_outlet_id=outlet.id,
+                               cost_center_code=outlet.cost_center_code)
+            db.add(w)
+            db.flush()
+            added['warehouses'] += 1
+        if outlet.warehouse_id != w.id:
+            outlet.warehouse_id = w.id
+        if w.allow_negative != outlet.allow_negative_stock:
+            w.allow_negative = outlet.allow_negative_stock
+        wh_ids[f'POS-{outlet.code}'] = w.id
+
+    item_ids = {}
+    # 1) جسر أصناف POS المخزونية ← أصناف مخزون مربوطة
+    for pos_item in db.execute(select(m.PosItem).where(
+            m.PosItem.tenant_id == tid,
+            m.PosItem.item_type == 'STOCK')).scalars().all():
+        row = db.execute(select(m.InvItem).where(
+            m.InvItem.tenant_id == tid,
+            m.InvItem.pos_item_id == pos_item.id)).scalar_one_or_none()
+        if not row:
+            row = m.InvItem(id=new_uuid(), tenant_id=tid,
+                            code=pos_item.code, name_ar=pos_item.name_ar,
+                            name_en=pos_item.name_en,
+                            category_id=cat_ids['FB'], base_unit='حبة',
+                            inventory_account_code='1210',
+                            pos_item_id=pos_item.id, created_at=utcnow())
+            db.add(row)
+            db.flush()
+            added['items'] += 1
+        item_ids[pos_item.code] = row.id
+    # 2) الأصناف التشغيلية المستقلة
+    for code, name, name_en, cat, unit, alt, reorder, safety, acct, track in INV_ITEMS:
+        row = db.execute(select(m.InvItem).where(
+            m.InvItem.tenant_id == tid,
+            m.InvItem.code == code)).scalar_one_or_none()
+        if not row:
+            row = m.InvItem(id=new_uuid(), tenant_id=tid, code=code,
+                            name_ar=name, name_en=name_en,
+                            category_id=cat_ids[cat], base_unit=unit,
+                            alt_units=alt, reorder_level=reorder,
+                            safety_level=safety, inventory_account_code=acct,
+                            track_expiry=track, created_at=utcnow())
+            db.add(row)
+            db.flush()
+            added['items'] += 1
+        item_ids[code] = row.id
+
+    sup_ids = {}
+    for code, name, contact, phone, terms in INV_SUPPLIERS:
+        row = db.execute(select(m.InvSupplier).where(
+            m.InvSupplier.tenant_id == tid,
+            m.InvSupplier.code == code)).scalar_one_or_none()
+        if not row:
+            row = m.InvSupplier(id=new_uuid(), tenant_id=tid, code=code,
+                                name=name, contact_person=contact,
+                                phone=phone, terms_days=terms)
+            db.add(row)
+            db.flush()
+            added['suppliers'] += 1
+        sup_ids[code] = row.id
+
+    for sup_code, item_code, price in INV_SUPPLIER_PRICES:
+        if item_code not in item_ids:
+            continue
+        if not db.execute(select(m.InvSupplierPrice).where(
+                m.InvSupplierPrice.supplier_id == sup_ids[sup_code],
+                m.InvSupplierPrice.item_id == item_ids[item_code])
+        ).first():
+            db.add(m.InvSupplierPrice(
+                id=new_uuid(), tenant_id=tid,
+                supplier_id=sup_ids[sup_code], item_id=item_ids[item_code],
+                price=price, valid_from=date(2020, 1, 1)))
+    db.flush()
+
+    # 3) ترحيل أرصدة POS الافتتاحية (مرة واحدة — الحركة هي المرجع)
+    for ps in db.execute(select(m.PosStock).where(
+            m.PosStock.tenant_id == tid)).scalars().all():
+        outlet = db.get(m.PosOutlet, ps.outlet_id)
+        pos_item = db.get(m.PosItem, ps.item_id)
+        if outlet is None or pos_item is None:
+            continue
+        wh_id = wh_ids.get(f'POS-{outlet.code}')
+        iid = item_ids.get(pos_item.code)
+        if not wh_id or not iid:
+            continue
+        if db.execute(select(m.InvMove).where(
+                m.InvMove.warehouse_id == wh_id, m.InvMove.item_id == iid,
+                m.InvMove.reason == 'OPENING')).first():
+            continue
+        inv_item = db.get(m.InvItem, iid)
+        inv_mod.apply_inbound(
+            db, tenant_id=tid, warehouse=db.get(m.InvWarehouse, wh_id),
+            item_id=iid, qty=ps.qty_on_hand, unit_cost=pos_item.cost,
+            reason='OPENING', ref_type='MIGRATE', ref_id=ps.id,
+            actor_id='system', bd=today)
+        added['stock_migrated'] += 1
+
+    # 4) أرصدة المستودعات التشغيلية الافتتاحية — بقيد عبر المحرك حصراً
+    for wh_code, item_code, qty, cost in INV_STOCK_OPEN:
+        if db.execute(select(m.InvMove).where(
+                m.InvMove.warehouse_id == wh_ids[wh_code],
+                m.InvMove.item_id == item_ids[item_code],
+                m.InvMove.reason == 'OPENING')).first():
+            continue
+        wh = db.get(m.InvWarehouse, wh_ids[wh_code])
+        amount = (qty if hasattr(qty, 'quantize') else
+                  __import__('decimal').Decimal(str(qty))) * \
+            __import__('decimal').Decimal(str(cost))
+        entry = create_and_post_journal(
+            db, tenant_id=tid, branch_id=bid, journal_type='AUTO_PURCHASE',
+            entry_date=today,
+            narration=f'رصيد مخزون افتتاحي {item_code} × {qty} @ {cost}',
+            raw_lines=[
+                {'account': wh.inventory_account_code, 'debit': amount,
+                 'credit': 0, 'description': 'رصيد افتتاحي مخزون'},
+                {'account': '8002', 'debit': 0, 'credit': amount,
+                 'description': 'مقابل افتتاحي مرحلي'}],
+            actor_id='system', source_type='STOCK_OPEN_INV',
+            source_id=f'{wh_code}:{item_code}',
+            event_key=f'invstock:open:{wh_code}:{item_code}')
+        inv_mod.apply_inbound(
+            db, tenant_id=tid, warehouse=wh, item_id=item_ids[item_code],
+            qty=qty, unit_cost=cost, reason='OPENING', ref_type='SEED',
+            ref_id=entry.id, actor_id='system', bd=today, entry_id=entry.id)
+        added['stock_opened'] += 1
+    db.flush()
+    return added
+
+
 def ensure_hotel_upgrade(db: Session) -> dict:
-    """يرفع قاعدة قائمة (تحوي حسابات) بكيانات الفندق وPOS دون فقدان بيانات."""
+    """يرفع قاعدة قائمة (تحوي حسابات) بكيانات الفندق وPOS والمخزون دون فقدان بيانات."""
     tenant = db.execute(select(m.Tenant).limit(1)).scalar_one_or_none()
     if tenant is None:
         return {'upgraded': False, 'reason': 'empty-db'}
@@ -729,6 +1013,7 @@ def ensure_hotel_upgrade(db: Session) -> dict:
 
     out = {'upgraded': True, 'maps': 0, 'rooms': 0, 'extras': 0,
            'roles_updated': []}
+    out['coa_added'] = ensure_coa_upgrade(db)
 
     # خرائط الربط الناقصة (من القائمتين العامة والفندقية)
     base_maps = [(e, None, d, t) for e, d, t in POSTING_MAPS]
@@ -763,5 +1048,6 @@ def ensure_hotel_upgrade(db: Session) -> dict:
     out['extras'] = added['extras']
     pos_added = seed_pos(db, tenant.id, branch.id)
     out['pos'] = pos_added
+    out['inv'] = seed_inv(db, tenant.id, branch.id)
     db.commit()
     return out

@@ -104,6 +104,10 @@ def create_outlet(body: OutletIn, db: Session = Depends(get_db),
                     cash_variance_tolerance=body.cash_variance_tolerance,
                     cost_center_code=body.cost_center_code, created_at=utcnow())
     db.add(o)
+    db.flush()
+    # مستودع المنفذ الافتراضي فوراً (ملف 04 §1 + ADR-0017)
+    from .. import inventory as inv_mod
+    inv_mod.outlet_warehouse(db, pr.tenant_id, o)
     db.commit()
     return {'id': o.id, 'code': o.code}
 
@@ -183,6 +187,11 @@ def create_item(body: ItemIn, db: Session = Depends(get_db),
                    revenue_account_code=body.revenue_account_code,
                    item_type=body.item_type, cost=body.cost)
     db.add(it)
+    db.flush()
+    if it.item_type == 'STOCK':
+        # ربط تلقائي بدفتر المخزون الموحد (ADR-0017)
+        from .. import inventory as inv_mod
+        inv_mod.auto_link_pos_item(db, tenant_id=pr.tenant_id, pos_item=it)
     db.commit()
     return {'id': it.id}
 
@@ -331,16 +340,24 @@ def create_table(body: TableIn, outlet_id: str,
 @router.get('/stock')
 def get_stock(outlet_id: str, db: Session = Depends(get_db),
               pr: Principal = Depends(require_perm('pos.view'))):
-    rows = db.execute(select(m.PosStock).where(
-        m.PosStock.outlet_id == outlet_id)).scalars().all()
+    """رصيد المنفذ من دفتر المخزون الموحد (ADR-0017) بنفس شكل المرحلة 4."""
+    from .. import inventory as inv_mod
+    outlet = ps.outlet_or_err(db, pr.tenant_id, outlet_id)
+    wh = inv_mod.outlet_warehouse(db, pr.tenant_id, outlet)
     out = []
-    for s in rows:
-        it = db.get(m.PosItem, s.item_id)
-        out.append({'item_id': s.item_id, 'code': it.code if it else '',
-                    'name': it.name_ar if it else '',
-                    'type': it.item_type if it else '',
+    for s in db.execute(select(m.InvStock).where(
+            m.InvStock.warehouse_id == wh.id)).scalars().all():
+        iit = db.get(m.InvItem, s.item_id)
+        if iit is None:
+            continue
+        it = db.get(m.PosItem, iit.pos_item_id) if iit.pos_item_id else None
+        out.append({'item_id': iit.pos_item_id or s.item_id,
+                    'inv_item_id': s.item_id,
+                    'code': it.code if it else iit.code,
+                    'name': it.name_ar if it else iit.name_ar,
+                    'type': it.item_type if it else 'STOCK',
                     'qty_on_hand': D(s.qty_on_hand),
-                    'unit_cost': D(it.cost) if it else D(0),
+                    'unit_cost': D(s.avg_cost),
                     'negative': D(s.qty_on_hand) < 0})
     return sorted(out, key=lambda r: r['code'])
 

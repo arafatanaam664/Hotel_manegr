@@ -13,6 +13,10 @@ const NAV = [
   { to: '/pos/shifts', label: 'الورديات وZ', icon: '⏱', perm: 'pos.view' },
   { to: '/pos/catalog', label: 'كتالوج البيع', icon: '🗂', perm: 'pos.view' },
   { to: '/pos/reports', label: 'تقارير البيع', icon: '📈', perm: 'pos.reports' },
+  { to: '/inv/catalog', label: 'كتالوج المخزون', icon: '📦', perm: 'inv.view' },
+  { to: '/inv/purchasing', label: 'دورة المشتريات', icon: '🛒', perm: 'inv.view' },
+  { to: '/inv/operations', label: 'حركة المخزون', icon: '🔄', perm: 'inv.view' },
+  { to: '/inv/reports', label: 'تقارير المخزون', icon: '📊', perm: 'inv.reports' },
   { to: '/accounts', label: 'دليل الحسابات', icon: '☷', perm: 'accounts.view' },
   { to: '/journals', label: 'القيود اليومية', icon: '✎', perm: 'journals.view' },
   { to: '/journals/new', label: 'قيد يدوي جديد', icon: '＋', perm: 'journals.manual' },
@@ -52,7 +56,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.4.0 — بوابات G1..G4 ✅
+          إصدار 0.5.0 — بوابات G1..G5 ✅
         </div>
       </aside>
 

@@ -32,9 +32,19 @@ def _item(db, tid, code):
 
 
 def _stock(db, outlet_id, item_id):
-    row = db.execute(select(m.PosStock).where(
-        m.PosStock.outlet_id == outlet_id,
-        m.PosStock.item_id == item_id)).scalar_one_or_none()
+    """رصيد صنف في منفذ من دفتر المخزون الموحد (ADR-0017) — المصدر الوحيد
+    للحقيقة منذ المرحلة 5؛ نفس الدلالة السابقة تماماً."""
+    wh = db.execute(select(m.InvWarehouse).where(
+        m.InvWarehouse.pos_outlet_id == outlet_id)).scalar_one_or_none()
+    if wh is None:
+        return Decimal('0')
+    iit = db.execute(select(m.InvItem).where(
+        m.InvItem.pos_item_id == item_id)).scalar_one_or_none()
+    if iit is None:
+        return Decimal('0')
+    row = db.execute(select(m.InvStock).where(
+        m.InvStock.warehouse_id == wh.id,
+        m.InvStock.item_id == iit.id)).scalar_one_or_none()
     return D_(row.qty_on_hand) if row else Decimal('0')
 
 
