@@ -45,7 +45,8 @@ def user_perms(db: Session, user: m.User) -> list[str]:
     return sorted(set(perms))
 
 
-def get_principal(cred: HTTPAuthorizationCredentials = Depends(bearer),
+def get_principal(request: Request,
+                  cred: HTTPAuthorizationCredentials = Depends(bearer),
                   db: Session = Depends(get_db)) -> Principal:
     try:
         payload = decode_token(cred.credentials)
@@ -59,6 +60,10 @@ def get_principal(cred: HTTPAuthorizationCredentials = Depends(bearer),
     if user is None or not user.is_active:
         raise HTTPException(401, {'error': {'code': 'AUTH.USER_INACTIVE',
                                             'message_ar': 'المستخدم غير نشط'}})
+    # بوابة الترخيص الرحيمة (ملف 07 §3/§5) — قبل أي منطق عمل
+    from . import licensing as lic
+    lic.enforce_request(db, tenant_id=user.tenant_id, username=user.username,
+                        method=request.method, path=request.url.path)
     return Principal(user, user_perms(db, user), user.branch_ids or [])
 
 

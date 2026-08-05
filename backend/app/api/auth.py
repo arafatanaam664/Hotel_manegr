@@ -101,6 +101,10 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     user.failed_attempts = 0
     user.locked_until = None
     user.last_login_at = now
+    # ملف 07 §3: عند الإيقاف النهائي لا دخول إلا لحساب الطوارئ المالي
+    from .. import licensing as lic
+    lic.ensure_login_allowed(db, tenant_id=user.tenant_id,
+                             username=user.username)
     pair = _issue_pair(db, user, request)
     audit(db, tenant_id=user.tenant_id, actor_id=user.id, actor_type='user',
           module='security', action='auth.login.success', entity='users',

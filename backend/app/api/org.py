@@ -58,6 +58,9 @@ class CreateUserIn(BaseModel):
 @router.post('/users', status_code=201)
 def create_user(body: CreateUserIn, db: Session = Depends(get_db),
                 pr: Principal = Depends(require_perm('settings.manage'))):
+    # القيد الصلب لعدد المستخدمين (ملف 07 §5) — رسالة ترقية واضحة
+    from .. import licensing as lic
+    lic.enforce_user_limit(db, pr.tenant_id)
     exists = db.execute(
         select(m.User).where(m.User.tenant_id == pr.tenant_id,
                              m.User.username == body.username)).scalar_one_or_none()

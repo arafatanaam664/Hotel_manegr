@@ -66,18 +66,27 @@ def create_app() -> FastAPI:
                                'errors': exc.errors()}})
 
     # ── الموجِّهات ─────────────────────────────────────
-    from .api import (accounting, auth, health, hotel, inventory, org, pos,
-                      reports, hr, assets)
+    # حراس الوحدات (ملف 07 §5): قفل ناعم برسالة ترقية للوحدات غير المرخّصة
+    from fastapi import Depends as _Depends
+    from . import licensing as _lic
+    from .api import (accounting, auth, health, hotel, inventory, license,
+                      org, pos, reports, hr, assets)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
+    app.include_router(license.router)
     app.include_router(accounting.router)
     app.include_router(reports.router)
-    app.include_router(hotel.router)
-    app.include_router(pos.router)
-    app.include_router(inventory.router)
-    app.include_router(hr.router)
-    app.include_router(assets.router)
+    app.include_router(hotel.router, dependencies=[
+        _Depends(_lic.require_module('HOTEL'))])
+    app.include_router(pos.router, dependencies=[
+        _Depends(_lic.require_module('POS'))])
+    app.include_router(inventory.router, dependencies=[
+        _Depends(_lic.require_module('INVENTORY'))])
+    app.include_router(hr.router, dependencies=[
+        _Depends(_lic.require_module('HR'))])
+    app.include_router(assets.router, dependencies=[
+        _Depends(_lic.require_module('ASSETS'))])
 
     # ── الإقلاع: جداول + زرع ─────────────────────────────
     @app.on_event('startup')
@@ -87,11 +96,19 @@ def create_app() -> FastAPI:
             db = SessionLocal()
             try:
                 from .seed import ensure_hotel_upgrade, seed_if_empty
-                if not seed_if_empty(db, tenant_name=s.demo_tenant_name,
-                                     admin_username=s.admin_username,
-                                     admin_password=s.admin_password)['seeded']:
+                out = seed_if_empty(db, tenant_name=s.demo_tenant_name,
+                                    admin_username=s.admin_username,
+                                    admin_password=s.admin_password)
+                if not out['seeded']:
                     # قاعدة قائمة ← ترقية بدون فقدان (خرائط/غرف/أدوار الفندق)
                     ensure_hotel_upgrade(db)
+                # فحص الترخيص عند الإقلاع (ملف 07 §3)
+                from . import licensing as _lic2
+                from . import models as _m
+                from sqlalchemy import select as _sel
+                trow = db.execute(_sel(_m.Tenant.id).limit(1)).first()
+                if trow:
+                    _lic2.startup_check(db, trow[0])
             finally:
                 db.close()
 

@@ -1310,6 +1310,12 @@ for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
     elif _code in ('ACCOUNTANT', 'AUDITOR', 'GM'):
         ROLES[_i] = (_code, _name, _desc, _perms + FA_VIEW)
 
+# دمج صلاحيات المرحلة 8: إدارة الترخيص (ملف 07 §5) — المدير المالي والعام
+LIC_ADMIN = ['license.manage']
+for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
+    if _code in ('FINANCE_MANAGER', 'GM'):
+        ROLES[_i] = (_code, _name, _desc, _perms + LIC_ADMIN)
+
 
 # ════════════════════════════════════════════════════════════════════
 # زرع الأصول الثابتة التجريبية — ملف 11 (ز) (أصول وهمية للمعاينة فقط)

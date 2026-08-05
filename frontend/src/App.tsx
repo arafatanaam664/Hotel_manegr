@@ -31,6 +31,7 @@ import HrReports from './pages/HrReports'
 import FinAssets from './pages/FinAssets'
 import FinStatements from './pages/FinStatements'
 import FinClose from './pages/FinClose'
+import LicenseStatus from './pages/LicenseStatus'
 
 export default function App() {
   const { session } = useAuth()
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="fin/assets" element={<FinAssets />} />
         <Route path="fin/statements" element={<FinStatements />} />
         <Route path="fin/close" element={<FinClose />} />
+        <Route path="license" element={<LicenseStatus />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
         <Route path="journals/new" element={<JournalNew />} />

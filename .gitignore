@@ -23,3 +23,8 @@ frontend/dist/
 
 # ناتج بناء TypeScript
 *.tsbuildinfo
+# مفاتيح الترخيص الخاصة (ملف 07 §7-5) — لا تدخل المستودع أبداً
+dev_keys/
+*.license
+license_private*.pem
+*_private.pem

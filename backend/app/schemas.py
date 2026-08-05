@@ -287,3 +287,48 @@ class FaDisposeIn(BaseModel):
 
 class FaRunIn(BaseModel):
     month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+
+
+# ─── الترخيص (ملف 07) ───────────────────────────────────
+class LicenseInstallIn(BaseModel):
+    """ملف ترخيص JSON موقَّع بتوقيع Ed25519 كما تسلّمه العميل من الشركة."""
+    payload: dict
+
+
+class LicenseFingerprintOut(BaseModel):
+    bound: bool
+    match_components: int
+    passing: bool
+    hash: str
+
+
+class LicenseLimitsOut(BaseModel):
+    max_users: int
+    used_users: int
+    max_branches: int
+    used_branches: int
+
+
+class LicenseStatusOut(BaseModel):
+    state: str
+    status_reason: str
+    package: str
+    legal_name: str
+    license_id: str
+    support_level: str
+    issued_at: str | None = None
+    valid_until: str | None = None
+    grace_until: str | None = None
+    days_to_expire: int | None = None
+    in_grace: bool
+    trial: bool
+    trial_started: str | None = None
+    modules_enabled: list[str]
+    modules_disabled: list[str]
+    features_flags: dict
+    limits: LicenseLimitsOut
+    fingerprint: LicenseFingerprintOut
+    clock_anchor_date: str | None = None
+    last_check: str | None = None
+    revocation_serial: int
+    site_id: str

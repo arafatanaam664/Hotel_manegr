@@ -2027,3 +2027,33 @@ class FaDepreciationRun(Base):
                                                  default=_hr_now)
     __table_args__ = (UniqueConstraint('tenant_id', 'month',
                                        name='uq_fa_run_month'),)
+
+
+# ─────────────────────────── الترخيص (ملف 07، المخطط 11-ح) ──────────
+class LicenseState(Base):
+    """حالة الترخيص للموقع (صف واحد لكل مستأجر) — الحمولة الموقَّعة نفسها
+    هي المرجع الوحيد للصلاحيات والحدود (لا تُقرأ من بيانات قابلة للتعديل)."""
+    __tablename__ = 'license_state'
+    site_id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                         default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey('tenants.id'),
+                                           index=True, unique=True)
+    payload_signed: Mapped[dict] = mapped_column(JSONType, default=dict)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    grace_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_check: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    clock_anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    state: Mapped[str] = mapped_column(String(16), default='TRIAL')
+    package: Mapped[str] = mapped_column(String(10), default='LOCAL')
+    # مكونات البصمة المربوطة {board, disk, mac} مجزأة — قاعدة تطابق 2 من 3
+    bound_components: Mapped[dict] = mapped_column(JSONType, default=dict)
+    trial_started: Mapped[date | None] = mapped_column(Date, nullable=True)
+    revocation_serial: Mapped[int] = mapped_column(Integer, default=0)
+    revocation_payload: Mapped[dict] = mapped_column(JSONType, default=dict)
+    status_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now,
+                                                 onupdate=_hr_now)

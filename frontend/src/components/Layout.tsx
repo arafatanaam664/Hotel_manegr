@@ -1,6 +1,9 @@
 // هيكل التطبيق: شريط جانبي RTL بهوية أثير + شريط علوي بالمستخدم
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+// + شريط حالة الترخيص الرحيم (ملف 07 §3: تنبيه أصفر بالمهلة، أحمر بالقيد)
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { licApi, LicenseStatus } from '../license'
 
 const NAV = [
   { to: '/', label: 'لوحة القيادة', icon: '◈', end: true },
@@ -30,7 +33,59 @@ const NAV = [
   { to: '/trial-balance', label: 'ميزان المراجعة', icon: '⚖', perm: 'reports.view' },
   { to: '/ledger', label: 'دفتر الأستاذ', icon: '📖', perm: 'reports.view' },
   { to: '/audit', label: 'سجل التدقيق', icon: '🛡', perm: 'audit.view' },
+  { to: '/license', label: 'حالة الترخيص', icon: '🔑' },
 ]
+
+/** شريط تنبيه الترخيص: أصفر بالمهلة (كل شيء يعمل)، أحمر بالقيد/القفل —
+ تُحدَّث كل 5 دقائق ولا تعرقل التقارير والتصدير أبداً (07 §3). */
+function LicenseBanner() {
+  const [st, setSt] = useState<LicenseStatus | null>(null)
+  useEffect(() => {
+    let alive = true
+    const tick = () => licApi.status()
+      .then(s => { if (alive) setSt(s) }).catch(() => {})
+    tick()
+    const t = setInterval(tick, 5 * 60 * 1000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
+  if (!st) return null
+  const days = st.days_to_expire
+  if (st.state === 'GRACE') {
+    return (
+      <div className="bg-amber-100 border-b border-amber-300 text-amber-900 px-6 py-2 text-sm flex items-center justify-between">
+        <span>⚠️ انتهى الاشتراك — أنت في مهلة التجديد (حتى {st.grace_until}).
+          كل شيء يعمل الآن؛ جدّد لتفادي وضع القراءة فقط.</span>
+        <Link to="/license" className="font-bold underline shrink-0">التجديد الآن</Link>
+      </div>
+    )
+  }
+  if (st.state === 'READ_ONLY' || st.state === 'REVOKED' || st.state === 'INVALID') {
+    return (
+      <div className="bg-red-100 border-b border-red-300 text-red-900 px-6 py-2 text-sm flex items-center justify-between">
+        <span>🔒 النظام في وضع القراءة فقط — التقارير والطباعة والتصدير تعمل
+          كاملة؛ إضافة العمليات موقوفة حتى التجديد.</span>
+        <Link to="/license" className="font-bold underline shrink-0">تفاصيل الترخيص</Link>
+      </div>
+    )
+  }
+  if (st.state === 'SUSPENDED' || st.state === 'CLOCK_LOCK') {
+    return (
+      <div className="bg-red-800 text-white px-6 py-2 text-sm flex items-center justify-between">
+        <span>⛔ {st.status_reason}</span>
+        <Link to="/license" className="font-bold underline shrink-0">حالة الترخيص</Link>
+      </div>
+    )
+  }
+  if (st.state === 'TRIAL' && days !== null && days <= 14) {
+    return (
+      <div className="bg-sky-50 border-b border-sky-200 text-sky-900 px-6 py-2 text-sm flex items-center justify-between">
+        <span>🧪 الفترة التجريبية تنتهي بعد {days} يوم.</span>
+        <Link to="/license" className="font-bold underline shrink-0">تفعيل الترخيص</Link>
+      </div>
+    )
+  }
+  return null
+}
 
 export default function Layout() {
   const { session, logout, has } = useAuth()
@@ -63,7 +118,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.7.0 — بوابات G1..G7 ✅
+          إصدار 0.8.0 — بوابات G1..G8 ✅
         </div>
       </aside>
 
@@ -84,6 +139,7 @@ export default function Layout() {
             تسجيل الخروج
           </button>
         </header>
+        <LicenseBanner />
         <main className="flex-1 p-6 overflow-x-auto">
           <Outlet />
         </main>
