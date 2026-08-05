@@ -562,6 +562,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
     seed_hotel(db, tid, bid)
     seed_pos(db, tid, bid)
     seed_inv(db, tid, bid)
+    seed_hr(db, tid, bid)
 
     # أدوار ومستخدم مدير
     role_ids = {}
@@ -1049,5 +1050,251 @@ def ensure_hotel_upgrade(db: Session) -> dict:
     pos_added = seed_pos(db, tenant.id, branch.id)
     out['pos'] = pos_added
     out['inv'] = seed_inv(db, tenant.id, branch.id)
+    out['hr'] = seed_hr(db, tenant.id, branch.id)
     db.commit()
     return out
+
+
+# ════════════════════════════════════════════════════════════════════
+# زرع الموارد البشرية — ملف 06 (بيانات تجريبية وهمية لا لأشخاص حقيقيين)
+# ════════════════════════════════════════════════════════════════════
+HR_VIEW = ['hr.view', 'hr.reports']
+HR_MANAGER_WORK = ['hr.employees.manage', 'hr.changes.manage',
+                   'hr.roster.manage', 'hr.attendance.manage',
+                   'hr.attendance.approve', 'hr.leave.manage',
+                   'hr.leave.approve', 'hr.penalty.manage',
+                   'hr.penalty.approve', 'hr.advance.request',
+                   'hr.payroll.prepare', 'hr.salary.view']
+HR_FINANCE = ['hr.advance.approve', 'hr.pay', 'hr.payroll.approve',
+              'hr.changes.approve', 'hr.policy.manage',
+              'hr.salary.view', 'hr.salary.confidential']
+
+HR_DEPARTMENTS = [
+ ('REC', 'الاستقبال', 'CC-ROOMS', '6110', False),
+ ('HK', 'الهوسكيبينج (الطوابق)', 'CC-ROOMS', '6110', False),
+ ('FNB', 'المطبخ والمطعم', 'CC-FB', '6210', False),
+ ('ADM', 'الإدارة والعمومية', 'CC-ADMIN', '6310', True),
+ ('MNT', 'الصيانة والطاقة', 'CC-MNT', '6110', False)]
+
+HR_POSITIONS = [
+ ('REC', 'موظف استقبال', 'G2'), ('HK', 'مشرفة طوابق', 'G3'),
+ ('FNB', 'شيف رئيسي', 'G3'), ('ADM', 'محاسب أول', 'G4'),
+ ('MNT', 'فني صيانة', 'G2')]
+
+HR_SHIFTS = [
+ ('الصباحية', '07:00', '15:00', False),
+ ('المسائية', '15:00', '23:00', False),
+ ('الليلية', '23:00', '07:00', True)]
+
+HR_LEAVE_TYPES = [
+ ('ANN', 'إجازة سنوية', True, '2.5'),
+ ('SICK', 'إجازة مرضية', True, '1.0'),
+ ('EMG', 'إجازة طارئة', True, '0.5'),
+ ('UPL', 'إجازة بدون أجر', False, '0')]
+
+HR_PAY_ITEMS = [
+ ('BASIC', 'الراتب الأساسي (نظام)', 'EARNING', True),
+ ('OT', 'ساعات إضافية (نظام)', 'EARNING', True),
+ ('ABS', 'خصم غياب (نظام)', 'DEDUCTION', True),
+ ('LATE', 'خصم تأخير (نظام)', 'DEDUCTION', True),
+ ('UPL', 'إجازة بدون أجر (نظام)', 'DEDUCTION', True),
+ ('PEN', 'جزاءات تأديبية (نظام)', 'DEDUCTION', True),
+ ('ADV', 'استقطاع سلفة (نظام)', 'DEDUCTION', True),
+ ('EOS', 'تعويض نهاية خدمة (نظام)', 'EARNING', True),
+ ('WTH', 'تأمينات اجتماعية موظف (مثال — معطة حتى يضبطها محاسب العميل)',
+  'DEDUCTION', False)]
+
+# موظفون تجريبيون (أسماء وهمية): رقم، اسم، قسم، وظيفة، أساسي، بدلات
+HR_EMPLOYEES = [
+ ('EMP-001', 'أحمد سالم باجابر', 'REC', 'موظف استقبال', '1200',
+  [{'code': 'HOU', 'name': 'بدل سكن', 'amount': '200'},
+   {'code': 'TRN', 'name': 'بدل نقل', 'amount': '100'}]),
+ ('EMP-002', 'فاطمة النجار', 'HK', 'مشرفة طوابق', '950',
+  [{'code': 'HOU', 'name': 'بدل سكن', 'amount': '150'}]),
+ ('EMP-003', 'محمد الحميري', 'FNB', 'شيف رئيسي', '1600',
+  [{'code': 'HOU', 'name': 'بدل سكن', 'amount': '300'},
+   {'code': 'FOD', 'name': 'بدل غذاء', 'amount': '150'}]),
+ ('EMP-004', 'سارة الكندي', 'ADM', 'محاسب أول', '1800',
+  [{'code': 'HOU', 'name': 'بدل سكن', 'amount': '400'},
+   {'code': 'TRN', 'name': 'بدل نقل', 'amount': '100'}]),
+ ('EMP-005', 'علي المطري', 'MNT', 'فني صيانة', '1100',
+  [{'code': 'HOU', 'name': 'بدل سكن', 'amount': '200'}])]
+
+
+def seed_hr(db: Session, tid: str, bid: str) -> dict:
+    """هيكل + ورديات + أنواع إجازات + بنود + موظفون تجريبيون + أرصدة
+    مستحقة حتى الشهر الحالي + سلفة مصروفة توضيحية (#23 عبر المحرك)."""
+    from .posting import create_and_post_journal, D
+    from decimal import Decimal
+    added = {'departments': 0, 'positions': 0, 'shifts': 0, 'leave_types': 0,
+             'pay_items': 0, 'employees': 0, 'balances': 0, 'advances': 0}
+    today = date.today()
+
+    dept_ids: dict[str, str] = {}
+    for code, name, cc, acct, conf in HR_DEPARTMENTS:
+        row = db.execute(select(m.HrDepartment).where(
+            m.HrDepartment.tenant_id == tid,
+            m.HrDepartment.code == code)).scalar_one_or_none()
+        if row is None:
+            row = m.HrDepartment(tenant_id=tid, code=code, name_ar=name,
+                                 cost_center_code=cc,
+                                 payroll_account_code=acct,
+                                 is_confidential=conf)
+            db.add(row)
+            db.flush()
+            added['departments'] += 1
+        dept_ids[code] = row.id
+
+    pos_ids: dict[str, str] = {}
+    for dcode, title, grade in HR_POSITIONS:
+        row = db.execute(select(m.HrPosition).where(
+            m.HrPosition.tenant_id == tid,
+            m.HrPosition.department_id == dept_ids[dcode],
+            m.HrPosition.title == title)).scalar_one_or_none()
+        if row is None:
+            row = m.HrPosition(tenant_id=tid,
+                               department_id=dept_ids[dcode], title=title,
+                               grade=grade)
+            db.add(row)
+            db.flush()
+            added['positions'] += 1
+        pos_ids[title] = row.id
+
+    shift_ids: dict[str, str] = {}
+    for name, ft, tt, over in HR_SHIFTS:
+        row = db.execute(select(m.HrShift).where(
+            m.HrShift.tenant_id == tid, m.HrShift.name == name
+        ).where(m.HrShift.from_time == ft)).scalar_one_or_none()
+        if row is None:
+            row = m.HrShift(tenant_id=tid, name=name, from_time=ft,
+                            to_time=tt, overnight=over)
+            db.add(row)
+            db.flush()
+            added['shifts'] += 1
+        shift_ids[name] = row.id
+
+    lt_ids: dict[str, str] = {}
+    for code, name, paid, ac in HR_LEAVE_TYPES:
+        row = db.execute(select(m.HrLeaveType).where(
+            m.HrLeaveType.tenant_id == tid,
+            m.HrLeaveType.code == code)).scalar_one_or_none()
+        if row is None:
+            row = m.HrLeaveType(tenant_id=tid, code=code, name=name,
+                                paid=paid, accrual_per_month=D(ac))
+            db.add(row)
+            db.flush()
+            added['leave_types'] += 1
+        lt_ids[code] = row.id
+
+    for code, name, typ, is_sys in HR_PAY_ITEMS:
+        if db.execute(select(m.HrPayItem.id).where(
+                m.HrPayItem.tenant_id == tid,
+                m.HrPayItem.code == code)).first() is None:
+            db.add(m.HrPayItem(tenant_id=tid, code=code, name=name,
+                               item_type=typ, calc='PCT_BASE',
+                               pct_base=(D('6') if code == 'WTH'
+                                         else D('0')),
+                               credit_account_code='2220',
+                               is_system=is_sys,
+                               is_active=(code != 'WTH')))
+            added['pay_items'] += 1
+    if db.get(m.HrPolicy, tid) is None:
+        db.add(m.HrPolicy(tenant_id=tid))
+
+    morning = shift_ids['الصباحية']
+    hire_base = date(today.year - 2, 3, 1)  # تعيين قديم مستقر تجريبياً
+    emp_ids: dict[str, str] = {}
+    for no, name, dcode, ptitle, base, allw in HR_EMPLOYEES:
+        row = db.execute(select(m.HrEmployee).where(
+            m.HrEmployee.tenant_id == tid,
+            m.HrEmployee.emp_no == no)).scalar_one_or_none()
+        if row is None:
+            row = m.HrEmployee(tenant_id=tid, branch_id=bid, emp_no=no,
+                               full_name=name,
+                               department_id=dept_ids[dcode],
+                               position_id=pos_ids[ptitle],
+                               shift_id=morning, hire_date=hire_base,
+                               contract_type='PERM',
+                               base_salary=D(base), allowances=allw,
+                               created_by='system-seed')
+            db.add(row)
+            db.flush()
+            added['employees'] += 1
+        emp_ids[no] = row.id
+
+    # أرصدة إجازات مستحقة حتى الشهر الحالي (كأن الاستحقاق سار من يناير)
+    months_elapsed = [f'{today.year:04d}-{mo:02d}'
+                      for mo in range(1, today.month + 1)]
+    for code, _, paid, ac in HR_LEAVE_TYPES:
+        if not paid:
+            continue
+        ac_d = D(ac)
+        for no, eid in emp_ids.items():
+            bal = db.execute(select(m.HrLeaveBalance).where(
+                m.HrLeaveBalance.tenant_id == tid,
+                m.HrLeaveBalance.employee_id == eid,
+                m.HrLeaveBalance.leave_type_id == lt_ids[code],
+                m.HrLeaveBalance.year == today.year)).scalar_one_or_none()
+            if bal is None:
+                bal = m.HrLeaveBalance(tenant_id=tid, employee_id=eid,
+                                       leave_type_id=lt_ids[code],
+                                       year=today.year)
+                db.add(bal)
+                db.flush()
+            if not (bal.accrued_months or []):
+                bal.entitled = ac_d * Decimal(today.month)
+                bal.accrued_months = months_elapsed
+                added['balances'] += 1
+
+    # سلفة توضيحية مصروفة لـEMP-001 (#23 — مفتاح حتمي للبذر)
+    if db.execute(select(m.HrAdvance.id).where(
+            m.HrAdvance.tenant_id == tid,
+            m.HrAdvance.reason == 'سلفة توضيحية بذرية')).first() is None \
+            and added['employees'] > 0:
+        cur_month = f'{today.year:04d}-{today.month:02d}'
+        a = m.HrAdvance(tenant_id=tid, employee_id=emp_ids['EMP-001'],
+                        amount=D('500'), installments=2,
+                        installment_amount=D('250'), remaining=D('500'),
+                        request_date=today, first_deduct_month=cur_month,
+                        reason='سلفة توضيحية بذرية', status='APPROVED',
+                        approved_by='system-seed',
+                        approved_at=utcnow(),
+                        created_by='system-seed')
+        db.add(a)
+        db.flush()
+        ent = create_and_post_journal(
+            db, tenant_id=tid, branch_id=bid, journal_type='AUTO_PAYROLL',
+            entry_date=today,
+            narration='صرف سلفة (بيانات افتتاحية تجريبية) EMP-001',
+            raw_lines=[
+                {'account': '1130', 'debit': D('500'), 'credit': D('0'),
+                 'party_type': 'EMPLOYEE', 'party_id': emp_ids['EMP-001'],
+                 'description': 'منح سلفة موظف'},
+                {'account': '1101', 'debit': D('0'), 'credit': D('500'),
+                 'description': 'صرف نقدي سلفة'}],
+            actor_id='system-seed', source_type='HR_ADVANCE', source_id=a.id,
+            event_key='hr:advance:pay:seed:EMP-001')
+        a.status = 'PAID'
+        a.paid_by = 'system-seed'
+        a.paid_at = utcnow()
+        a.paid_entry_id = ent.id
+        added['advances'] += 1
+    db.flush()
+    return added
+
+
+# دمج صلاحيات HR في الأدوار القائمة + دور مدير الموارد البشرية
+for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
+    if _code == 'FINANCE_MANAGER':
+        ROLES[_i] = (_code, _name, _desc, _perms + HR_VIEW + HR_FINANCE)
+    elif _code == 'GM':
+        ROLES[_i] = (_code, _name, _desc,
+                     _perms + HR_VIEW + ['hr.changes.approve'])
+    elif _code == 'ACCOUNTANT':
+        ROLES[_i] = (_code, _name, _desc, _perms + HR_VIEW)
+    elif _code == 'AUDITOR':
+        ROLES[_i] = (_code, _name, _desc, _perms + HR_VIEW)
+ROLES.append(
+    ('HR_MANAGER', 'مدير موارد بشرية',
+     'ملفات وحضور وإجازات وإعداد مسيرات (لا اعتماد مالي ذاتي — ملف 14)',
+     HR_VIEW + HR_MANAGER_WORK))

@@ -1575,3 +1575,401 @@ class InvPolicy(Base):
                                                    nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
+
+
+# ════════════════════════════════════════════════════════════════════
+# الموارد البشرية والرواتب — ملف 06 + مخطط 11 §(و) + أحداث #21..#23 (ملف 02)
+# ════════════════════════════════════════════════════════════════════
+import uuid as _uuid
+
+
+def _hr_uuid() -> str:
+    return str(_uuid.uuid4())
+
+
+def _hr_now():
+    from datetime import timezone
+    return datetime.now(timezone.utc)
+
+
+class HrDepartment(Base):
+    """قسم تنظيمي مرتبط بمركز تكلفة وحساب رواتب (ملف 06 §1)."""
+    __tablename__ = 'hr_departments'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name_ar: Mapped[str] = mapped_column(String(100))
+    cost_center_code: Mapped[str] = mapped_column(String(20), default='CC-ADMIN')
+    payroll_account_code: Mapped[str] = mapped_column(String(10),
+                                                      default='6310')
+    is_confidential: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_hrdept_tenant_code'),)
+
+
+class HrPosition(Base):
+    """وظيفة داخل قسم مع درجة في السُّلم (ملف 06 §1)."""
+    __tablename__ = 'hr_positions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    department_id: Mapped[str] = mapped_column(String(36), index=True)
+    title: Mapped[str] = mapped_column(String(100))
+    grade: Mapped[str] = mapped_column(String(10), default='G1')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class HrEmployee(Base):
+    """ملف موظف: شخصي حساس مشفر ساكناً + عقد وحالة دورة حياة (§1)."""
+    __tablename__ = 'hr_employees'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(String(36))
+    emp_no: Mapped[str] = mapped_column(String(20))
+    full_name: Mapped[str] = mapped_column(String(150))
+    national_id_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str] = mapped_column(String(30), default='')
+    department_id: Mapped[str] = mapped_column(String(36), index=True)
+    position_id: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    shift_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    hire_date: Mapped[date] = mapped_column(Date)
+    contract_type: Mapped[str] = mapped_column(String(10), default='PERM')
+    # PERM دائم | TEMP مؤقت | PIECE بالقطعة
+    base_salary: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    allowances: Mapped[list] = mapped_column(JSONType, default=list)
+    # [{code, name, amount} | {code, name, pct_base}]
+    bank_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default='ACTIVE')
+    # ACTIVE نشط | SUSPENDED موقوف | TERMINATED منتهي
+    termination_date: Mapped[date | None] = mapped_column(Date,
+                                                          nullable=True)
+    termination_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+    __table_args__ = (UniqueConstraint('tenant_id', 'emp_no',
+                                       name='uq_hremp_tenant_no'),)
+
+
+class HrEmployeeChange(Base):
+    """نقل/ترقية/تعديل أجر بمستند واعتماد (§1 — لا اعتماد ذاتي)."""
+    __tablename__ = 'hr_employee_changes'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    change_type: Mapped[str] = mapped_column(String(10))
+    # TRANSFER نقل | PROMOTE ترقية | SALARY تعديل أجر
+    before: Mapped[dict] = mapped_column(JSONType, default=dict)
+    after: Mapped[dict] = mapped_column(JSONType, default=dict)
+    doc_ref: Mapped[str] = mapped_column(String(120))
+    effective_from: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), default='PENDING')
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class HrShift(Base):
+    """وردية تعريفية؛ overnight يعني تعبر منتصف الليل (§2)."""
+    __tablename__ = 'hr_shifts'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    name: Mapped[str] = mapped_column(String(60))
+    from_time: Mapped[str] = mapped_column(String(5))
+    to_time: Mapped[str] = mapped_column(String(5))
+    overnight: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class HrRoster(Base):
+    """إسناد وردية ليوم محدد؛ صف واحد لكل (موظف، يوم)."""
+    __tablename__ = 'hr_rosters'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    roster_date: Mapped[date] = mapped_column(Date)
+    shift_id: Mapped[str] = mapped_column(String(36))
+    __table_args__ = (UniqueConstraint('employee_id', 'roster_date',
+                                       name='uq_hrroster_emp_date'),)
+
+
+class HrAttendance(Base):
+    """رصد يومي: يدوي معتمد من المشرف؛ الإضافي لا يُحتسب إلا بعد الاعتماد."""
+    __tablename__ = 'hr_attendance'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    att_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), default='PRESENT')
+    # PRESENT حضور | ABSENT غياب | LEAVE إجازة
+    in_time: Mapped[str] = mapped_column(String(5), default='')
+    out_time: Mapped[str] = mapped_column(String(5), default='')
+    late_min: Mapped[int] = mapped_column(Integer, default=0)
+    early_min: Mapped[int] = mapped_column(Integer, default=0)
+    overtime_hours: Mapped[Decimal] = mapped_column(Numeric(7, 2), default=0)
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    entered_by: Mapped[str] = mapped_column(String(36), default='')
+    __table_args__ = (UniqueConstraint('employee_id', 'att_date',
+                                       name='uq_hratt_emp_date'),)
+
+
+class HrLeaveType(Base):
+    __tablename__ = 'hr_leave_types'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(80))
+    paid: Mapped[bool] = mapped_column(Boolean, default=True)
+    accrual_per_month: Mapped[Decimal] = mapped_column(Numeric(7, 2),
+                                                       default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_hrlt_tenant_code'),)
+
+
+class HrLeaveBalance(Base):
+    """رصيد إجازة سنوي؛ accrued_months يمنع تكرار الاستحقاق الشهري (§2)."""
+    __tablename__ = 'hr_leave_balances'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    leave_type_id: Mapped[str] = mapped_column(String(36), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    entitled: Mapped[Decimal] = mapped_column(Numeric(9, 2), default=0)
+    used: Mapped[Decimal] = mapped_column(Numeric(9, 2), default=0)
+    accrued_months: Mapped[list] = mapped_column(JSONType, default=list)
+    __table_args__ = (UniqueConstraint('employee_id', 'leave_type_id',
+                                       'year', name='uq_hrlb_emp_type_year'),)
+
+
+class HrLeaveRequest(Base):
+    __tablename__ = 'hr_leave_requests'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    leave_type_id: Mapped[str] = mapped_column(String(36))
+    from_date: Mapped[date] = mapped_column(Date)
+    to_date: Mapped[date] = mapped_column(Date)
+    days: Mapped[Decimal] = mapped_column(Numeric(7, 2))
+    reason: Mapped[str] = mapped_column(String(300), default='')
+    status: Mapped[str] = mapped_column(String(10), default='PENDING')
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class HrAdvance(Base):
+    """سلفة: طلب بسقف ← اعتماد ← صرف #23 ← استقطاع قسط شهري تلقائي (§3)."""
+    __tablename__ = 'hr_advances'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    installments: Mapped[int] = mapped_column(Integer, default=1)
+    installment_amount: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                        default=0)
+    remaining: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    request_date: Mapped[date] = mapped_column(Date)
+    first_deduct_month: Mapped[str] = mapped_column(String(7), default='')
+    reason: Mapped[str] = mapped_column(String(300), default='')
+    status: Mapped[str] = mapped_column(String(10), default='REQUESTED')
+    # REQUESTED | APPROVED | PAID | SETTLED | REJECTED | CANCELLED
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    paid_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),
+                                                     nullable=True)
+    paid_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True)
+    paid_account_code: Mapped[str] = mapped_column(String(10),
+                                                   default='1101')
+    reject_reason: Mapped[str] = mapped_column(String(300), default='')
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class HrPayItem(Base):
+    """بند راتب قابل للتكوين (§4.1): FIXED مبلغ | PCT_BASE نسبة من الأساسي."""
+    __tablename__ = 'hr_pay_items'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(80))
+    item_type: Mapped[str] = mapped_column(String(10))
+    # EARNING استحقاق | DEDUCTION استقطاع
+    calc: Mapped[str] = mapped_column(String(10), default='FIXED')
+    pct_base: Mapped[Decimal] = mapped_column(Numeric(9, 4), default=0)
+    credit_account_code: Mapped[str] = mapped_column(String(10),
+                                                     default='2220')
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('tenant_id', 'code',
+                                       name='uq_hrpi_tenant_code'),)
+
+
+class HrPenalty(Base):
+    """جزاء تأديبي بمستند واعتماد؛ يخصم في شهر apply_month (§2)."""
+    __tablename__ = 'hr_penalties'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    pen_date: Mapped[date] = mapped_column(Date)
+    apply_month: Mapped[str] = mapped_column(String(7))
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    reason: Mapped[str] = mapped_column(String(300))
+    doc_ref: Mapped[str] = mapped_column(String(120), default='')
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    deducted_run_id: Mapped[str | None] = mapped_column(String(36),
+                                                        nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class HrPayrollRun(Base):
+    """مسير شهري: لا قيد قبل إعداد HR + اعتماد مالي (§4.2) — واحد NORMAL
+    لكل شهر؛ التصحيح بمسير تسوية SUPPLEMENTAL مربوط بالأصل (§4.3)."""
+    __tablename__ = 'hr_payroll_runs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    month: Mapped[str] = mapped_column(String(7))  # YYYY-MM
+    kind: Mapped[str] = mapped_column(String(12), default='NORMAL')
+    # NORMAL | SUPPLEMENTAL | FINAL
+    parent_run_id: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True)
+    supp_seq: Mapped[int] = mapped_column(Integer, default=0)
+    final_employee_id: Mapped[str | None] = mapped_column(String(36),
+                                                          nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default='DRAFT')
+    # DRAFT|REVIEWED|APPROVED|POSTED|PAID|CANCELLED
+    employee_count: Mapped[int] = mapped_column(Integer, default=0)
+    gross_total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    unearned_total: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                    default=0)
+    withholdings_total: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                        default=0)
+    advances_total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    net_total: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    dept_totals: Mapped[dict] = mapped_column(JSONType, default=dict)
+    manual_lines: Mapped[dict] = mapped_column(JSONType, default=dict)
+    prepared_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    prepared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    posted_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                        nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    paid_seq: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str] = mapped_column(String(36), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+    __table_args__ = (UniqueConstraint('tenant_id', 'month', 'kind',
+                                       'supp_seq', name='uq_hrpr_month_kind'),)
+
+
+class HrPayslip(Base):
+    """قسيمة: لقطة كاملة للبنود والمدخلات لحظة الاحتساب (§4.2-2) —
+    غير قابلة للتعديل بعد اعتماد مسيرها (قبول-4/§5)."""
+    __tablename__ = 'hr_payslips'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    department_id: Mapped[str] = mapped_column(String(36))
+    gross: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    unearned: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    withholdings: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    advances: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    penalties: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    net: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=0)
+    items_snapshot: Mapped[list] = mapped_column(JSONType, default=list)
+    inputs_snapshot: Mapped[dict] = mapped_column(JSONType, default=dict)
+    paid_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                      nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    __table_args__ = (UniqueConstraint('run_id', 'employee_id',
+                                       name='uq_hrps_run_emp'),)
+
+
+class HrEosProvision(Base):
+    """مخصص نهاية الخدمة الشهري الاختياري (§4.3): Dr مصروف | Cr مخصص."""
+    __tablename__ = 'hr_eos_provisions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                    default=_hr_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), index=True)
+    month: Mapped[str] = mapped_column(String(7))
+    amount: Mapped[Decimal] = mapped_column(Numeric(19, 4))
+    posted_entry_id: Mapped[str | None] = mapped_column(String(36),
+                                                        nullable=True)
+    __table_args__ = (UniqueConstraint('tenant_id', 'employee_id', 'month',
+                                       name='uq_hreos_emp_month'),)
+
+
+class HrPolicy(Base):
+    """سياسة الرواتب القابلة للتكوين لكل مستأجر (§4.1 — بصلاحية مالية)."""
+    __tablename__ = 'hr_policy'
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    day_count_mode: Mapped[str] = mapped_column(String(10),
+                                                default='FIXED30')
+    # FIXED30 قسمة على 30 | CALENDAR أيام الشهر الفعلية
+    advance_max_pct: Mapped[Decimal] = mapped_column(Numeric(7, 4),
+                                                     default=50)
+    workday_hours: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=8)
+    ot_multiplier: Mapped[Decimal] = mapped_column(Numeric(6, 4),
+                                                   default=Decimal('1.5'))
+    late_deduct_daily: Mapped[Decimal] = mapped_column(Numeric(19, 4),
+                                                       default=0)
+    penalty_credit_code: Mapped[str] = mapped_column(String(10),
+                                                     default='2220')
+    # 2220 مستحقة للجهات | 4901 تُعاد إيراداً (§2 — قابل للتكوين)
+    eos_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    eos_month_rate: Mapped[Decimal] = mapped_column(
+        Numeric(9, 6), default=Decimal('0.083333'))
+    eos_credit_account_code: Mapped[str] = mapped_column(String(10),
+                                                         default='2320')
+    updated_by: Mapped[str | None] = mapped_column(String(36),
+                                                   nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)

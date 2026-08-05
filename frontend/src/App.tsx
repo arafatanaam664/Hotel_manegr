@@ -24,6 +24,10 @@ import InvCatalog from './pages/InvCatalog'
 import InvPurchasing from './pages/InvPurchasing'
 import InvOperations from './pages/InvOperations'
 import InvReports from './pages/InvReports'
+import HrPeople from './pages/HrPeople'
+import HrTime from './pages/HrTime'
+import HrPayroll from './pages/HrPayroll'
+import HrReports from './pages/HrReports'
 
 export default function App() {
   const { session } = useAuth()
@@ -53,6 +57,10 @@ export default function App() {
         <Route path="inv/purchasing" element={<InvPurchasing />} />
         <Route path="inv/operations" element={<InvOperations />} />
         <Route path="inv/reports" element={<InvReports />} />
+        <Route path="hr/people" element={<HrPeople />} />
+        <Route path="hr/time" element={<HrTime />} />
+        <Route path="hr/payroll" element={<HrPayroll />} />
+        <Route path="hr/reports" element={<HrReports />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
         <Route path="journals/new" element={<JournalNew />} />
