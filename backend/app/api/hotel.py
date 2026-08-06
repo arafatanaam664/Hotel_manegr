@@ -4,7 +4,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import hotel as hs
@@ -14,13 +14,14 @@ from ..deps import Principal, require_perm
 from ..audit import audit
 from ..posting import PostingError
 from ..schemas_hotel import (CancelIn, ChargeIn, CheckInIn, CheckoutIn,
-                             CorporateIn, DepositIn, DiscountIn, ExtraIn,
-                             ExtraPatch, GuestIn, HkChangeIn,
+                             CompanionIn, CompanionPatch, CorporateIn,
+                             DepositIn, DiscountIn, ExtraIn,
+                             ExtraPatch, GuestIn, GuestPatch, HkChangeIn,
                              ModifyReservationIn, PaymentIn,
                              RateCalendarBulk, RatePlanIn, RatePlanPatch,
                              ReservationIn, RoomIn, RoomMoveIn, RoomPatch,
                              RoomTypeIn, RoomTypePatch, TransferCorpIn,
-                             WalkInIn)
+                             TripPatch, WalkInIn)
 from ..security import (decrypt_pii, encrypt_pii, mask_id, new_uuid,
                         utcnow)
 
@@ -55,24 +56,44 @@ def _rsv_or_404(db, tid, rid) -> m.Reservation:
     return r
 
 
-def _rsv_out(db, r: m.Reservation) -> dict:
+def _rsv_out(db, r: m.Reservation, *, with_companions: bool = False) -> dict:
     room = db.get(m.Room, r.room_id) if r.room_id else None
     rt = db.get(m.RoomType, r.room_type_id)
     guest = db.get(m.Guest, r.guest_id)
     corp = db.get(m.Corporate, r.corporate_id) if r.corporate_id else None
-    return {'id': r.id, 'confirmation_no': r.confirmation_no,
-            'status': r.status, 'source': r.source,
-            'guest_name': guest.full_name if guest else '—',
-            'guest_id_masked': mask_id(guest.id_number_enc) if guest else '',
-            'corporate': corp.name if corp else None,
-            'room_no': room.room_no if room else None,
-            'room_type': rt.name_ar if rt else '—',
-            'arrival_date': r.arrival_date, 'departure_date': r.departure_date,
-            'nights': r.nights, 'adults': r.adults, 'children': r.children,
-            'agreed_rate': str(r.agreed_rate), 'est_total': str(r.est_total),
-            'checked_in_at': r.checked_in_at, 'checked_out_at': r.checked_out_at,
-            'corporate_id': r.corporate_id,
-            'deposit_balance': str(hs.deposit_balance(db, r.tenant_id, r.id))}
+    out = {'id': r.id, 'confirmation_no': r.confirmation_no,
+           'status': r.status, 'source': r.source,
+           'guest_name': guest.full_name if guest else '—',
+           'guest_id_masked': mask_id(guest.id_number_enc) if guest else '',
+           'corporate': corp.name if corp else None,
+           'room_no': room.room_no if room else None,
+           'room_type': rt.name_ar if rt else '—',
+           'arrival_date': r.arrival_date, 'departure_date': r.departure_date,
+           'nights': r.nights, 'adults': r.adults, 'children': r.children,
+           'agreed_rate': str(r.agreed_rate), 'est_total': str(r.est_total),
+           'checked_in_at': r.checked_in_at, 'checked_out_at': r.checked_out_at,
+           'corporate_id': r.corporate_id,
+           # بيانات الرحلة للمعلومية (0.14.0):
+           'purpose': r.purpose, 'origin_gov': r.origin_gov,
+           'origin_district': r.origin_district,
+           'vehicle_note': r.vehicle_note, 'police_notes': r.police_notes,
+           'deposit_balance': str(hs.deposit_balance(db, r.tenant_id, r.id))}
+    if with_companions:
+        comps = db.execute(select(m.ReservationCompanion).where(
+            m.ReservationCompanion.reservation_id == r.id).order_by(
+            m.ReservationCompanion.sort_order,
+            m.ReservationCompanion.created_at)).scalars().all()
+        out['companions'] = [_companion_out(c) for c in comps]
+    return out
+
+
+def _companion_out(c: m.ReservationCompanion) -> dict:
+    return {'id': c.id, 'full_name': c.full_name, 'id_type': c.id_type,
+            'id_masked': mask_id(c.id_number_enc),
+            'id_issue_place': c.id_issue_place,
+            'id_issue_date': c.id_issue_date, 'phone': c.phone,
+            'origin_gov': c.origin_gov, 'origin_district': c.origin_district,
+            'has_id': bool(c.id_number_enc), 'sort_order': c.sort_order}
 
 
 # ── الغرفة الراك (لوحة الطوابق) وأنواع الغرف ─────────────────────────
@@ -583,29 +604,58 @@ def list_guests(q: str = '', db: Session = Depends(get_db),
         m.Guest.full_name)).scalars().all()
     if q:
         rows = [g for g in rows if q in g.full_name or q in g.phone]
-    return [{'id': g.id, 'full_name': g.full_name, 'phone': g.phone,
-             'id_masked': mask_id(g.id_number_enc),
-             'nationality': g.nationality, 'vip': g.vip,
-             'blacklist': g.blacklist} for g in rows]
+    return [_guest_out(g) for g in rows]
+
+
+def _guest_out(g: m.Guest) -> dict:
+    return {'id': g.id, 'full_name': g.full_name, 'phone': g.phone,
+            'id_masked': mask_id(g.id_number_enc), 'id_type': g.id_type,
+            'id_issue_place': g.id_issue_place,
+            'id_issue_date': g.id_issue_date,
+            'nationality': g.nationality, 'vip': g.vip,
+            'blacklist': g.blacklist, 'has_id': bool(g.id_number_enc)}
 
 
 @router.post('/guests', status_code=201)
 def create_guest(body: GuestIn, db: Session = Depends(get_db),
                  pr: Principal = Depends(require_perm('guests.manage'))):
-    from ..security import new_uuid
     g = m.Guest(id=new_uuid(), tenant_id=pr.tenant_id,
                 full_name=body.full_name, phone=body.phone,
                 id_number_enc=encrypt_pii(body.id_number),
+                id_type=body.id_type, id_issue_place=body.id_issue_place,
+                id_issue_date=body.id_issue_date,
                 nationality=body.nationality, vip=body.vip,
                 notes=body.notes, created_at=utcnow())
     db.add(g)
-    from ..audit import audit
     audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
           module='hotel', action='guest.create', entity='guests',
           entity_id=g.id, after={'name': g.full_name})
     db.commit()
-    return {'id': g.id, 'full_name': g.full_name,
-            'id_masked': mask_id(g.id_number_enc)}
+    return _guest_out(g)
+
+
+@router.patch('/guests/{gid}')
+def update_guest(gid: str, body: GuestPatch, db: Session = Depends(get_db),
+                 pr: Principal = Depends(require_perm('guests.manage'))):
+    """تحديث ملف النزيل — منها حقول المعلومية (نوع الهوية وإصدارها)."""
+    g = db.get(m.Guest, gid)
+    if not g or g.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'GEN.NOT_FOUND',
+                                            'message_ar': 'نزيل غير موجود'}})
+    before = {'name': g.full_name, 'id_type': g.id_type}
+    for f in ('full_name', 'phone', 'nationality', 'vip', 'blacklist',
+              'notes', 'id_type', 'id_issue_place', 'id_issue_date'):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(g, f, v)
+    if body.id_number is not None:
+        g.id_number_enc = encrypt_pii(body.id_number)
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='guest.update', entity='guests',
+          entity_id=g.id, before=before,
+          after={'name': g.full_name, 'id_type': g.id_type})
+    db.commit()
+    return _guest_out(g)
 
 
 @router.get('/corporates')
@@ -694,7 +744,11 @@ def create_reservation(body: ReservationIn, db: Session = Depends(get_db),
         rate_plan_id=plan.id if plan else None,
         room_id=room.id if room else None, adults=body.adults,
         children=body.children, source=body.source,
-        rate_override=body.rate_override)
+        rate_override=body.rate_override,
+        trip={'purpose': body.purpose, 'origin_gov': body.origin_gov,
+              'origin_district': body.origin_district,
+              'vehicle_note': body.vehicle_note,
+              'police_notes': body.police_notes})
     db.commit()
     return _rsv_out(db, res)
 
@@ -703,7 +757,7 @@ def create_reservation(body: ReservationIn, db: Session = Depends(get_db),
 def get_reservation(rid: str, db: Session = Depends(get_db),
                     pr: Principal = Depends(require_perm('reservations.view'))):
     r = _rsv_or_404(db, pr.tenant_id, rid)
-    out = _rsv_out(db, r)
+    out = _rsv_out(db, r, with_companions=True)
     out['night_rates'] = [
         {'date': str(nr.stay_date), 'rate': str(nr.rate),
          'origin': nr.rate_origin} for nr in db.execute(
@@ -732,6 +786,99 @@ def modify_reservation(rid: str, body: ModifyReservationIn,
                                 new_room_id=room.id if room else None)
     db.commit()
     return out
+
+
+# ── بيانات الرحلة والمرافقون (المعلومية — 0.14.0) ─────────────────
+@router.patch('/reservations/{rid}/trip')
+def update_trip(rid: str, body: TripPatch, db: Session = Depends(get_db),
+                pr: Principal = Depends(require_perm('reservations.modify'))):
+    """الغرض من القدوم / الجهة / المركبة / ملاحظات المعلومية — بلا أثر مالي."""
+    r = _rsv_or_404(db, pr.tenant_id, rid)
+    before = {f: getattr(r, f) for f in
+              ('purpose', 'origin_gov', 'origin_district',
+               'vehicle_note', 'police_notes')}
+    for f in before:
+        v = getattr(body, f)
+        if v is not None:
+            setattr(r, f, v)
+    if getattr(r, 'version', None) is not None:
+        r.version += 1
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='reservation.trip_update',
+          entity='reservations', entity_id=r.id, before=before,
+          after={f: getattr(r, f) for f in before})
+    db.commit()
+    return _rsv_out(db, r)
+
+
+@router.post('/reservations/{rid}/companions', status_code=201)
+def add_companion(rid: str, body: CompanionIn, db: Session = Depends(get_db),
+                  pr: Principal = Depends(require_perm('reservations.modify'))):
+    """مرافق جديد على الحجز — صف مستقل في المعلومية ببيانات هويته."""
+    r = _rsv_or_404(db, pr.tenant_id, rid)
+    if r.status in ('CANCELLED', 'NO_SHOW'):
+        raise HTTPException(409, {'error': {
+            'code': 'HOTEL.RSV_CLOSED',
+            'message_ar': 'لا يضاف مرافق لحجز ملغى أو عدم حضور'}})
+    n = db.execute(select(func.count(m.ReservationCompanion.id)).where(
+        m.ReservationCompanion.reservation_id == r.id)).scalar_one()
+    c = m.ReservationCompanion(
+        id=new_uuid(), tenant_id=pr.tenant_id, reservation_id=r.id,
+        full_name=body.full_name, id_type=body.id_type,
+        id_number_enc=encrypt_pii(body.id_number),
+        id_issue_place=body.id_issue_place, id_issue_date=body.id_issue_date,
+        phone=body.phone, origin_gov=body.origin_gov,
+        origin_district=body.origin_district,
+        sort_order=n + 1, created_at=utcnow())
+    db.add(c)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='companion.create',
+          entity='reservation_companions', entity_id=c.id,
+          after={'name': c.full_name, 'reservation': r.confirmation_no})
+    db.commit()
+    return _companion_out(c)
+
+
+@router.patch('/companions/{cid}')
+def update_companion(cid: str, body: CompanionPatch,
+                     db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('reservations.modify'))):
+    c = db.get(m.ReservationCompanion, cid)
+    if not c or c.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'GEN.NOT_FOUND',
+                                            'message_ar': 'مرافق غير موجود'}})
+    for f in ('full_name', 'id_type', 'id_issue_place', 'id_issue_date',
+              'phone', 'origin_gov', 'origin_district'):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(c, f, v)
+    if body.id_number is not None:
+        c.id_number_enc = encrypt_pii(body.id_number)
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='companion.update',
+          entity='reservation_companions', entity_id=c.id,
+          after={'name': c.full_name})
+    db.commit()
+    return _companion_out(c)
+
+
+@router.delete('/companions/{cid}')
+def delete_companion(cid: str, db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('reservations.modify'))):
+    """حذف مرافق (خطأ إدخال) — الأرشيف المعلومة المرسلة سابقاً لا يتأثر أبداً."""
+    c = db.get(m.ReservationCompanion, cid)
+    if not c or c.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'GEN.NOT_FOUND',
+                                            'message_ar': 'مرافق غير موجود'}})
+    name = c.full_name
+    db.delete(c)
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='companion.delete',
+          entity='reservation_companions', entity_id=cid,
+          after={'name': name})
+    db.commit()
+    return {'deleted': True}
 
 
 @router.post('/reservations/{rid}/deposit', status_code=201)
@@ -801,7 +948,12 @@ def walk_in(body: WalkInIn, db: Session = Depends(get_db),
                      rate_plan_id=plan.id if plan else None,
                      room_id=room.id if room else None,
                      adults=body.adults, children=body.children,
-                     allow_dirty=body.allow_dirty)
+                     allow_dirty=body.allow_dirty,
+                     trip={'purpose': body.purpose,
+                           'origin_gov': body.origin_gov,
+                           'origin_district': body.origin_district,
+                           'vehicle_note': body.vehicle_note,
+                           'police_notes': body.police_notes})
     db.commit()
     return _rsv_out(db, res)
 

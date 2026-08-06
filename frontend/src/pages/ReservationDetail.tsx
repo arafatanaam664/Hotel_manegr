@@ -4,9 +4,10 @@ import { api, fmt, HttpError } from '../api'
 import { useAuth } from '../auth'
 import { Badge, Btn, Card, ErrorNote, OkNote, Spinner } from '../components/ui'
 import { getExtras, getFolio, getReservation, rsvStatusAr,
+         type Companion,
          type Extra, type FolioDetail, type Reservation } from '../hotel'
 
-type Panel = null | 'deposit' | 'charge' | 'payment' | 'discount' | 'transfer' | 'checkout' | 'cancel'
+type Panel = null | 'deposit' | 'charge' | 'payment' | 'discount' | 'transfer' | 'checkout' | 'cancel' | 'trip' | 'companion'
 
 export default function ReservationDetail() {
   const { id } = useParams()
@@ -15,6 +16,7 @@ export default function ReservationDetail() {
   const [folio, setFolio] = useState<FolioDetail | null>(null)
   const [extras, setExtras] = useState<Extra[]>([])
   const [panel, setPanel] = useState<Panel>(null)
+  const [compEdit, setCompEdit] = useState<Companion | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<Record<string, unknown> | null>(null)
@@ -170,6 +172,71 @@ export default function ReservationDetail() {
         </Card>
       ))}
 
+      {/* بيانات المعلومية اليومية + المرافقون (التبليغ الأمني — 0.14) */}
+      <Card title="🛂 بيانات المعلومية (تبليغ البحث الجنائي اليومي) والمرافقون"
+        actions={has('reservations.modify') && !['CANCELLED', 'NO_SHOW'].includes(rsv.status) ? (
+          <div className="flex gap-2">
+            <Btn kind="ghost" onClick={() => setPanel('trip')}>تعديل بيانات الرحلة</Btn>
+            <Btn onClick={() => setPanel('companion')}>+ مرافق</Btn>
+          </div>
+        ) : undefined}>
+        <div className="grid md:grid-cols-5 gap-2 text-sm mb-3">
+          <div><div className="text-[10px] text-slate-400">الغرض من القدوم</div>
+            <b>{rsv.purpose || <span className="text-red-500">⛔ فارغ (ناقص معلومية)</span>}</b></div>
+          <div><div className="text-[10px] text-slate-400">القادم من — المحافظة</div>
+            <b>{rsv.origin_gov || '—'}</b></div>
+          <div><div className="text-[10px] text-slate-400">المديرية/المدينة</div>
+            <b>{rsv.origin_district || '—'}</b></div>
+          <div><div className="text-[10px] text-slate-400">المركبة</div>
+            <b>{rsv.vehicle_note || '—'}</b></div>
+          <div><div className="text-[10px] text-slate-400">ملاحظات المرافقين</div>
+            <b>{rsv.police_notes || '—'}</b></div>
+        </div>
+        {(rsv.companions && rsv.companions.length > 0) ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 text-xs border-b">
+                <th className="text-right py-1.5">المرافق (صف مستقل في المعلومية)</th>
+                <th className="text-right">الهوية</th>
+                <th className="text-right">الإصدار</th>
+                <th className="text-right">الجهة</th>
+                <th className="text-right">الهاتف</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rsv.companions.map((c) => (
+                <tr key={c.id} className="border-b last:border-0">
+                  <td className="py-2 font-bold">↳ {c.full_name}</td>
+                  <td className="text-xs">{c.has_id
+                    ? <span>{c.id_type} <span className="num text-slate-400">{c.id_masked}</span></span>
+                    : <Badge tone="red">بلا رقم!</Badge>}</td>
+                  <td className="text-xs">{[c.id_issue_place, c.id_issue_date].filter(Boolean).join(' — ') || '—'}</td>
+                  <td className="text-xs">{[c.origin_gov, c.origin_district].filter(Boolean).join(' / ') || '—'}</td>
+                  <td className="num text-xs">{c.phone || '—'}</td>
+                  <td>{has('reservations.modify') && (
+                    <div className="flex gap-1">
+                      <Btn kind="ghost" onClick={() => setCompEdit(c)}>تعديل</Btn>
+                      <Btn kind="danger" onClick={async () => {
+                        if (!window.confirm(`حذف المرافق «${c.full_name}» من الحجز؟`)) return
+                        try {
+                          await api(`/api/hotel/companions/${c.id}`, { method: 'DELETE' })
+                          setOk('حُذف المرافق'); await refresh()
+                        } catch (e) {
+                          setErr(e instanceof HttpError ? e.message : 'فشل الحذف')
+                        }
+                      }}>حذف</Btn>
+                    </div>)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="text-xs text-slate-400 border-t pt-2">
+            لا مرافقين — عائلة/رفقاء الغرفة يُسجَّلون هنا صفاً صفاً لنموذج البحث الجنائي.
+          </div>
+        )}
+      </Card>
+
       {/* اللوحات التفاعلية */}
       {panel === 'deposit' && (
         <ActionPanel title="استلام عربون حجز (#01: صندوق ← أمانات 2110)" onClose={() => setPanel(null)}>
@@ -209,6 +276,24 @@ export default function ReservationDetail() {
           <TransferForm onSubmit={async (amount, reason) => {
             const r = await act('transfer-to-corporate', { amount, reason })
             if (r) setOk('حُوّلت الشحنة إلى نافذة الشركة')
+          }} />
+        </ActionPanel>
+      )}
+
+      {panel === 'trip' && (
+        <ActionPanel title="بيانات الرحلة — المعلومية اليومية (بلا أي أثر مالي)" onClose={() => setPanel(null)}>
+          <TripForm rsv={rsv} onDone={async () => {
+            setPanel(null); setOk('حُدّثت بيانات المعلومية'); await refresh()
+          }} />
+        </ActionPanel>
+      )}
+
+      {(panel === 'companion' || compEdit) && (
+        <ActionPanel title={compEdit ? `تعديل المرافق «${compEdit.full_name}»`
+                                    : 'مرافق جديد — صف مستقل في المعلومية'}
+                     onClose={() => { setPanel(null); setCompEdit(null) }} wide>
+          <CompanionForm rsvId={rsv.id} companion={compEdit} onDone={async () => {
+            setPanel(null); setCompEdit(null); setOk('حُفظ المرافق'); await refresh()
           }} />
         </ActionPanel>
       )}
@@ -530,4 +615,144 @@ function CheckoutForm({ balance, hasCorporate, onSubmit }: {
 
 function Err({ msg }: { msg: string | null }) {
   return msg ? <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-3 py-2 text-xs">{msg}</div> : null
+}
+
+// ── نموذج بيانات الرحلة للمعلومية (PATCH /trip) ─────────────
+function TripForm({ rsv, onDone }: {
+  rsv: Reservation; onDone: () => Promise<void>
+}) {
+  const [f, setF] = useState({
+    purpose: rsv.purpose ?? '', origin_gov: rsv.origin_gov ?? '',
+    origin_district: rsv.origin_district ?? '',
+    vehicle_note: rsv.vehicle_note ?? '', police_notes: rsv.police_notes ?? '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const inp = 'w-full border border-slate-300 rounded-xl px-3 py-2 text-sm'
+  const lab = 'text-xs text-slate-500 block mb-1'
+  return (
+    <form className="space-y-3" onSubmit={async (e) => {
+      e.preventDefault(); setBusy(true); setErr(null)
+      try {
+        await api(`/api/hotel/reservations/${rsv.id}/trip`, {
+          method: 'PATCH', body: JSON.stringify(f),
+        })
+        await onDone()
+      } catch (ex) { setErr(ex instanceof HttpError ? ex.message : 'فشل') }
+      setBusy(false)
+    }}>
+      <Err msg={err} />
+      <div className="grid md:grid-cols-3 gap-2.5">
+        <label className="block">
+          <span className={lab}>الغرض من القدوم</span>
+          <select className={inp + ' bg-white'} value={f.purpose}
+                  onChange={(e) => setF({ ...f, purpose: e.target.value })}>
+            <option value="">— اختر —</option>
+            <option value="زيارة">زيارة</option><option value="علاج">علاج</option>
+            <option value="جواز">جواز</option><option value="عمل">عمل</option>
+            <option value="سياحة">سياحة</option><option value="عبور">عبور</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+        </label>
+        <label className="block"><span className={lab}>القادم من — المحافظة</span>
+          <input className={inp} value={f.origin_gov} placeholder="تعز / إب / السعودية…"
+                 onChange={(e) => setF({ ...f, origin_gov: e.target.value })} /></label>
+        <label className="block"><span className={lab}>المديرية/المدينة</span>
+          <input className={inp} value={f.origin_district} placeholder="خدير / العدين / جدة…"
+                 onChange={(e) => setF({ ...f, origin_district: e.target.value })} /></label>
+        <label className="block"><span className={lab}>المركبة</span>
+          <input className={inp} value={f.vehicle_note} placeholder="هايلوكس أبيض — 1234"
+                 onChange={(e) => setF({ ...f, vehicle_note: e.target.value })} /></label>
+        <label className="block md:col-span-2"><span className={lab}>ملاحظات عمود المرافقين</span>
+          <input className={inp} value={f.police_notes} placeholder="مع العائلة / معروف لدينا…"
+                 onChange={(e) => setF({ ...f, police_notes: e.target.value })} /></label>
+      </div>
+      <Btn type="submit" disabled={busy}>{busy ? '…' : 'حفظ بيانات الرحلة'}</Btn>
+    </form>
+  )
+}
+
+// ── نموذج مرافق (إضافة/تعديل) ────────────────────────────
+const EMPTY_COMP = {
+  full_name: '', id_type: '', id_number: '', id_issue_place: '',
+  id_issue_date: '', phone: '', origin_gov: '', origin_district: '',
+}
+
+function CompanionForm({ rsvId, companion, onDone }: {
+  rsvId: string; companion: Companion | null; onDone: () => Promise<void>
+}) {
+  const [f, setF] = useState(companion ? {
+    full_name: companion.full_name, id_type: companion.id_type ?? '',
+    id_number: '', id_issue_place: companion.id_issue_place ?? '',
+    id_issue_date: companion.id_issue_date ?? '', phone: companion.phone ?? '',
+    origin_gov: companion.origin_gov ?? '',
+    origin_district: companion.origin_district ?? '',
+  } : EMPTY_COMP)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const inp = 'w-full border border-slate-300 rounded-xl px-3 py-2 text-sm'
+  const lab = 'text-xs text-slate-500 block mb-1'
+  return (
+    <form className="space-y-3" onSubmit={async (e) => {
+      e.preventDefault(); setBusy(true); setErr(null)
+      try {
+        const body: Record<string, unknown> = {
+          full_name: f.full_name.trim(), id_type: f.id_type,
+          id_issue_place: f.id_issue_place.trim(),
+          id_issue_date: f.id_issue_date || null,
+          phone: f.phone.trim(), origin_gov: f.origin_gov.trim(),
+          origin_district: f.origin_district.trim(),
+        }
+        if (f.id_number.trim()) body.id_number = f.id_number.trim()
+        if (companion) {
+          await api(`/api/hotel/companions/${companion.id}`, {
+            method: 'PATCH', body: JSON.stringify(body) })
+        } else {
+          await api(`/api/hotel/reservations/${rsvId}/companions`, {
+            method: 'POST', body: JSON.stringify(body) })
+        }
+        await onDone()
+      } catch (ex) { setErr(ex instanceof HttpError ? ex.message : 'فشل') }
+      setBusy(false)
+    }}>
+      <Err msg={err} />
+      <p className="text-[11px] text-slate-400">
+        كل مرافق يظهر صفاً مستقلاً في المعلومية باسمه وهويته
+        {companion?.id_masked ? ` — اترك رقم الهوية فارغاً ليبقى الحالي ${companion.id_masked}` : ''}.
+      </p>
+      <div className="grid md:grid-cols-2 gap-2.5">
+        <label className="block md:col-span-2"><span className={lab}>الاسم الكامل (رباعياً مع اللقب)</span>
+          <input className={inp} required autoFocus value={f.full_name}
+                 onChange={(e) => setF({ ...f, full_name: e.target.value })} /></label>
+        <label className="block"><span className={lab}>نوع الهوية</span>
+          <select className={inp + ' bg-white'} value={f.id_type}
+                  onChange={(e) => setF({ ...f, id_type: e.target.value })}>
+            <option value="">— اختر —</option>
+            <option value="شخصية">شخصية</option><option value="جواز">جواز</option>
+            <option value="عسكرية">عسكرية</option><option value="إقامة">إقامة</option>
+            <option value="أخرى">أخرى</option>
+          </select></label>
+        <label className="block"><span className={lab}>رقم الهوية (يُشفَّر ساكناً)</span>
+          <input className={inp + ' num'} value={f.id_number}
+                 onChange={(e) => setF({ ...f, id_number: e.target.value })} /></label>
+        <label className="block"><span className={lab}>مكان الإصدار</span>
+          <input className={inp} value={f.id_issue_place}
+                 onChange={(e) => setF({ ...f, id_issue_place: e.target.value })} /></label>
+        <label className="block"><span className={lab}>تاريخ الإصدار</span>
+          <input className={inp + ' num'} type="date" value={f.id_issue_date ?? ''}
+                 onChange={(e) => setF({ ...f, id_issue_date: e.target.value })} /></label>
+        <label className="block"><span className={lab}>القادم من — المحافظة</span>
+          <input className={inp} value={f.origin_gov}
+                 onChange={(e) => setF({ ...f, origin_gov: e.target.value })} /></label>
+        <label className="block"><span className={lab}>المديرية/المدينة</span>
+          <input className={inp} value={f.origin_district}
+                 onChange={(e) => setF({ ...f, origin_district: e.target.value })} /></label>
+        <label className="block"><span className={lab}>هاتف (اختياري)</span>
+          <input className={inp + ' num'} value={f.phone}
+                 onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
+      </div>
+      <Btn type="submit" disabled={busy || f.full_name.trim().length < 2}>
+        {busy ? '…' : companion ? 'حفظ المرافق' : 'إضافة المرافق'}</Btn>
+    </form>
+  )
 }

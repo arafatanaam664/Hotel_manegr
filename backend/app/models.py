@@ -28,6 +28,10 @@ class Tenant(Base):
     timezone: Mapped[str] = mapped_column(String(50), default='Asia/Aden')
     status: Mapped[str] = mapped_column(String(20), default='ACTIVE')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # ترويسة المعلومية اليومية (وحدة البحث الجنائي — 0.14.0):
+    address: Mapped[str] = mapped_column(String(200), default='')
+    district: Mapped[str] = mapped_column(String(80), default='')
+    office_label: Mapped[str] = mapped_column(String(40), default='')
 
 
 class Branch(Base):
@@ -469,13 +473,17 @@ class Extra(Base):
 
 
 class Guest(Base):
-    """هوية النزيل مشفرة ساكناً (ملف 10 §Data — لا تخزَّن صريحة أبداً)."""
+    """هوية النزيل مشفرة ساكناً (ملف 10 §Data — لا تخزَّن صريحة أبداً).
+    تُوسَّع 0.14.0 بحقول المعلومية: نوع الهوية ومكان إصدارها وتاريخه."""
     __tablename__ = 'guests'
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(36), index=True)
     full_name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(30), default='')
     id_number_enc: Mapped[str] = mapped_column(Text, default='')
+    id_type: Mapped[str] = mapped_column(String(20), default='')      # شخصية/جواز/أخرى
+    id_issue_place: Mapped[str] = mapped_column(String(80), default='')
+    id_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     nationality: Mapped[str] = mapped_column(String(50), default='')
     vip: Mapped[bool] = mapped_column(Boolean, default=False)
     blacklist: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -541,6 +549,13 @@ class Reservation(Base):
         DateTime(timezone=True), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=0)  # قفل تفاؤلي
 
+    # بيانات الرحلة للمعلومية اليومية (0.14.0) — خاصة بالإقامة لا بالنزيل:
+    purpose: Mapped[str] = mapped_column(String(40), default='')  # الغرض من القدوم
+    origin_gov: Mapped[str] = mapped_column(String(60), default='')      # المحافظة
+    origin_district: Mapped[str] = mapped_column(String(60), default='')  # المديرية
+    vehicle_note: Mapped[str] = mapped_column(String(120), default='')
+    police_notes: Mapped[str] = mapped_column(String(200), default='')  # ملاحظات العمود ن
+
     __table_args__ = (UniqueConstraint('tenant_id', 'confirmation_no',
                                        name='uq_rsv'),
                       Index('ix_rsv_room_dates', 'tenant_id', 'room_id',
@@ -548,6 +563,45 @@ class Reservation(Base):
 
     # منع إقصائي زمني مطلق للحجز المزدوج (Postgres في الإنتاج):
     # انظر sql/postgres_hardening.sql — قيد exclusion على daterange.
+
+
+class ReservationCompanion(Base):
+    """مرافقو الحجز (المعلومية 0.14.0): كل من في الغرفة غير النزيل الرئيسي —
+    ببيانات هويتهم الكاملة لأن نموذج البحث الجنائي يطلبهم صفاً صفاً."""
+    __tablename__ = 'reservation_companions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    reservation_id: Mapped[str] = mapped_column(
+        ForeignKey('reservations.id'), index=True)
+    full_name: Mapped[str] = mapped_column(String(150))
+    id_type: Mapped[str] = mapped_column(String(20), default='')
+    id_number_enc: Mapped[str] = mapped_column(Text, default='')  # مشفرة كالنزيل
+    id_issue_place: Mapped[str] = mapped_column(String(80), default='')
+    id_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    phone: Mapped[str] = mapped_column(String(30), default='')
+    origin_gov: Mapped[str] = mapped_column(String(60), default='')
+    origin_district: Mapped[str] = mapped_column(String(60), default='')
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PoliceReportRun(Base):
+    """أرشيف «ما أُرسل فعلاً» (0.14.0): كل تنزيل لمعلومية يوم يسجَّل هنا
+    بحمولته الكاملة وبصمته — يُعاد بناء نفس الملف حرفياً بعد أي تعديل لاحق."""
+    __tablename__ = 'police_report_runs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    report_date: Mapped[date] = mapped_column(Date, index=True)
+    generated_by: Mapped[str] = mapped_column(String(120))  # اسم المستخدم
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    rows_count: Mapped[int] = mapped_column(Integer, default=0)   # نزلاء+مرافقون
+    stays_count: Mapped[int] = mapped_column(Integer, default=0)  # غرف/حجوزات
+    header: Mapped[dict] = mapped_column(JSONType, default=dict)  # ترويسة المنشأة حينها
+    payload: Mapped[dict] = mapped_column(JSONType, default=dict)  # كل الصفوف
+    sha256: Mapped[str] = mapped_column(String(64))
+
+    __table_args__ = (Index('ix_police_runs_tenant_date',
+                            'tenant_id', 'report_date'),)
 
 
 class ReservationNightRate(Base):

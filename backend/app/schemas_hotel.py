@@ -4,8 +4,54 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
+# أنواع الهوية المعتمدة في المعلومية (غيرها نص حر قصير)
+ID_TYPES = {'شخصية', 'جواز', 'عسكرية', 'إقامة', 'أخرى'}
+# أغراض القدوم الشائعة (قائمة مقترحة — الحقل يقبل نصاً قصيراً)
+PURPOSES = {'زيارة', 'علاج', 'جواز', 'عمل', 'سياحة', 'عبور', 'أخرى'}
 
-class GuestIn(BaseModel):
+
+class IdDataMixin(BaseModel):
+    """حقول هوية المعلومية المشتركة بين النزيل والمرافق."""
+    id_type: str = Field(default='', max_length=20)
+    id_issue_place: str = Field(default='', max_length=80)
+    id_issue_date: date | None = None
+
+    @field_validator('id_type')
+    @classmethod
+    def _idt(cls, v: str) -> str:
+        v = v.strip()
+        if v and v not in ID_TYPES:
+            raise ValueError(
+                f'نوع هوية غير معتمد: {v} — المعتمدة: {"، ".join(sorted(ID_TYPES))}')
+        return v
+
+
+class TripFields(BaseModel):
+    """بيانات الرحلة للمعلومية — على الحجز (الإقامة) لا ملف النزيل."""
+    purpose: str = Field(default='', max_length=40)
+    origin_gov: str = Field(default='', max_length=60)
+    origin_district: str = Field(default='', max_length=60)
+    vehicle_note: str = Field(default='', max_length=120)
+    police_notes: str = Field(default='', max_length=200)
+
+
+class CompanionIn(IdDataMixin):
+    full_name: str = Field(min_length=2, max_length=150)
+    id_number: str = Field(default='', max_length=40)  # تُشفَّر ساكناً
+    phone: str = Field(default='', max_length=30)
+    origin_gov: str = Field(default='', max_length=60)
+    origin_district: str = Field(default='', max_length=60)
+
+
+class CompanionPatch(IdDataMixin):
+    full_name: str | None = Field(default=None, min_length=2, max_length=150)
+    id_number: str | None = Field(default=None, max_length=40)
+    phone: str | None = Field(default=None, max_length=30)
+    origin_gov: str | None = Field(default=None, max_length=60)
+    origin_district: str | None = Field(default=None, max_length=60)
+
+
+class GuestIn(IdDataMixin):
     full_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(default='', max_length=30)
     id_number: str = Field(default='', max_length=40)  # يُشفَّر ساكناً
@@ -14,11 +60,24 @@ class GuestIn(BaseModel):
     notes: str = Field(default='', max_length=300)
 
 
+class GuestPatch(IdDataMixin):
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    id_number: str | None = Field(default=None, max_length=40)
+    nationality: str | None = Field(default=None, max_length=50)
+    vip: bool | None = None
+    blacklist: bool | None = None
+    notes: str | None = Field(default=None, max_length=300)
+
+
 class GuestOut(BaseModel):
     id: str
     full_name: str
     phone: str
     id_masked: str
+    id_type: str
+    id_issue_place: str
+    id_issue_date: date | None
     nationality: str
     vip: bool
     blacklist: bool
@@ -32,7 +91,7 @@ class CorporateIn(BaseModel):
     discount_pct: Decimal = Field(default=Decimal('0'), ge=0, le=100)
 
 
-class ReservationIn(BaseModel):
+class ReservationIn(TripFields):
     guest_id: str
     room_type_code: str
     arrival_date: date
@@ -60,6 +119,15 @@ class ModifyReservationIn(BaseModel):
     new_room_no: str | None = None
 
 
+class TripPatch(BaseModel):
+    """تحديث بيانات الرحلة للمعلومية على حجز قائم (كلها اختيارية)."""
+    purpose: str | None = Field(default=None, max_length=40)
+    origin_gov: str | None = Field(default=None, max_length=60)
+    origin_district: str | None = Field(default=None, max_length=60)
+    vehicle_note: str | None = Field(default=None, max_length=120)
+    police_notes: str | None = Field(default=None, max_length=200)
+
+
 class DepositIn(BaseModel):
     amount: Decimal = Field(gt=0)
     method: str = Field(default='CASH')
@@ -75,7 +143,7 @@ class CheckInIn(BaseModel):
     allow_dirty: bool = False  # يتطلب صلاحية checkin.dirty_override
 
 
-class WalkInIn(BaseModel):
+class WalkInIn(TripFields):
     guest_id: str
     room_type_code: str
     departure_date: date

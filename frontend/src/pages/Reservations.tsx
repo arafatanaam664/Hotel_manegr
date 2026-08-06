@@ -110,6 +110,8 @@ function NewReservationModal({ onClose, onDone }: {
   const [nights, setNights] = useState(2)
   const [source, setSource] = useState('DIRECT')
   const [adults, setAdults] = useState(1)
+  const [trip, setTrip] = useState({ purpose: '', origin_gov: '',
+    origin_district: '', vehicle_note: '', police_notes: '' })
   const [deposit, setDeposit] = useState('')
   const [avail, setAvail] = useState<{ count: number; total: string; available_rooms: string[] } | null>(null)
   const [newGuest, setNewGuest] = useState('')
@@ -161,6 +163,7 @@ function NewReservationModal({ onClose, onDone }: {
         departure_date: dep,
         corporate_id: corporateId || null,
         adults, source: walkIn ? 'WALKIN' : source,
+        ...trip,
       }
       const r = walkIn
         ? await api<{ confirmation_no: string }>('/api/hotel/walk-in', {
@@ -246,6 +249,53 @@ function NewReservationModal({ onClose, onDone }: {
                    onChange={(e) => setAdults(parseInt(e.target.value) || 1)}
                    className="w-full border border-slate-300 rounded-xl px-3 py-2 num" />
           </label>
+        </div>
+
+        {/* بيانات المعلومية اليومية — تُطبع في تبليغ البحث الجنائي */}
+        <div className="border border-amber-200 bg-amber-50/60 rounded-xl p-3 mt-4">
+          <div className="font-bold text-sm mb-2">🛂 بيانات المعلومية (التبليغ الأمني اليومي)</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <label className="block">
+              <span className="text-xs text-slate-500 block mb-1">الغرض من القدوم</span>
+              <select value={trip.purpose}
+                      onChange={(e) => setTrip({ ...trip, purpose: e.target.value })}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+                <option value="">— اختر —</option>
+                <option value="زيارة">زيارة</option><option value="علاج">علاج</option>
+                <option value="جواز">جواز</option><option value="عمل">عمل</option>
+                <option value="سياحة">سياحة</option><option value="عبور">عبور</option>
+                <option value="أخرى">أخرى</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-500 block mb-1">القادم من — المحافظة</span>
+              <input value={trip.origin_gov} placeholder="تعز / إب / السعودية…"
+                     onChange={(e) => setTrip({ ...trip, origin_gov: e.target.value })}
+                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-500 block mb-1">المديرية/المدينة</span>
+              <input value={trip.origin_district} placeholder="خدير / العدين / جدة…"
+                     onChange={(e) => setTrip({ ...trip, origin_district: e.target.value })}
+                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
+            </label>
+            <label className="block col-span-2 md:col-span-1">
+              <span className="text-xs text-slate-500 block mb-1">المركبة (اختياري)</span>
+              <input value={trip.vehicle_note} placeholder="هايلوكس أبيض — 1234"
+                     onChange={(e) => setTrip({ ...trip, vehicle_note: e.target.value })}
+                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
+            </label>
+            <label className="block col-span-2">
+              <span className="text-xs text-slate-500 block mb-1">ملاحظات عمود المرافقين</span>
+              <input value={trip.police_notes} placeholder="مع العائلة / معروف لدينا…"
+                     onChange={(e) => setTrip({ ...trip, police_notes: e.target.value })}
+                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm" />
+            </label>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1.5">
+            المرافقون (من معه في الغرفة) يُضافون بعد إنشاء الحجز من شاشة «ملف الحجز» —
+            صفاً صفاً كما يطلب نموذج البحث الجنائي.
+          </p>
         </div>
 
         {avail && (

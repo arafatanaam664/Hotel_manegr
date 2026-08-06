@@ -1,5 +1,5 @@
 // طبقة API لوحدة الفندق — أنواع وجلب موحد
-import { api } from './api'
+import { api, HttpError, loadSession } from './api'
 
 export interface RoomType {
   id: string; code: string; name_ar: string; name_en: string
@@ -77,6 +77,9 @@ export interface Reservation {
   agreed_rate: string; est_total: string
   deposit_balance: string
   checked_in_at: string | null; checked_out_at: string | null
+  purpose: string; origin_gov: string; origin_district: string
+  vehicle_note: string; police_notes: string
+  companions?: Companion[]
   night_rates?: { date: string; rate: string; origin: string }[]
   folios?: FolioSummary[]
 }
@@ -106,6 +109,8 @@ export interface Extra { code: string; name_ar: string; price: string; revenue_a
 export interface Guest {
   id: string; full_name: string; phone: string
   id_masked: string; nationality: string; vip: boolean; blacklist: boolean
+  id_type: string; id_issue_place: string; id_issue_date: string | null
+  has_id: boolean
 }
 
 export interface Corporate {
@@ -155,4 +160,72 @@ export async function getReservation(id: string) {
 }
 export async function getFolio(id: string) {
   return api<FolioDetail>(`/api/hotel/folios/${id}`)
+}
+
+// ═══ المعلومية اليومية (البحث الجنائي — 0.14.0) ═══
+export interface Companion {
+  id: string; full_name: string; id_type: string; id_masked: string
+  id_issue_place: string; id_issue_date: string | null; phone: string
+  origin_gov: string; origin_district: string
+  has_id: boolean; sort_order: number
+}
+
+export interface PoliceRow {
+  kind: 'main' | 'companion'; stay: number; serial: number
+  room_no: string; name: string; arrival: string; purpose: string
+  origin_gov: string; origin_district: string; id_type: string
+  issue_place: string; issue_date: string; phone: string
+  in_time: string; notes: string; vehicle: string; has_id: boolean
+}
+
+export interface PoliceHeader {
+  hotel: string; address: string; district: string
+  office: string; weekday: string; date: string
+}
+
+export interface PolicePreview {
+  header: PoliceHeader; rows: PoliceRow[]
+  warnings: string[]; stays_count: number; rows_count: number
+}
+
+export interface PoliceRun {
+  id: string; report_date: string; generated_by: string
+  generated_at: string; rows_count: number; stays_count: number
+  sha256: string
+}
+
+export const policeApi = {
+  preview: (date: string) =>
+    api<PolicePreview>(`/api/hotel/police-report/preview?date=${date}`),
+  runs: () => api<PoliceRun[]>('/api/hotel/police-report/runs'),
+  saveHeader: (b: { address: string; district: string; office_label: string }) =>
+    api<{ address: string }>('/api/org/tenant/header', {
+      method: 'PATCH', body: JSON.stringify(b) }),
+}
+
+/** تنزيل ملف مصادَق كـ Blob مع اسم عربي من ترويسة الخادم */
+export async function downloadFile(path: string, fallbackName: string) {
+  const s = loadSession()
+  const r = await fetch(path, {
+    headers: { Authorization: `Bearer ${s?.access_token ?? ''}` },
+  })
+  if (!r.ok) {
+    let code = 'HTTP.' + r.status, msg = 'فشل التنزيل'
+    try {
+      const j = await r.json()
+      code = j.error?.code ?? code
+      msg = j.error?.message_ar ?? msg
+    } catch { /* غير JSON */ }
+    throw new HttpError(r.status, code, msg)
+  }
+  const cd = r.headers.get('content-disposition') ?? ''
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/)
+  const name = m ? decodeURIComponent(m[1]) : fallbackName
+  const blob = await r.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
+  return name
 }

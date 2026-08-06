@@ -47,6 +47,7 @@ PERMISSION_CATALOG = [
   ('folio.discount', 'منح خصم على الفوليو'),
   ('discounts.approve', 'اعتماد خصم فوق الحد المسموح'),
   ('nightaudit.run', 'تشغيل التدقيق الليلي وإقفال يوم العمل'),
+  ('police.report', 'المعلومية اليومية — إرسال البحث الجنائي'),
  ]},
  {'key': 'rooms', 'name': 'الفندق — الغرف والأسعار والخدمات', 'perms': [
   ('rooms.view', 'عرض الغرف وحالاتها'),
@@ -251,8 +252,36 @@ def get_tenant(db: Session = Depends(get_db),
     return {'id': t.id, 'legal_name': t.legal_name, 'trade_name': t.trade_name,
             'country': t.country, 'base_currency': t.base_currency,
             'timezone': t.timezone, 'status': t.status,
+            'address': t.address, 'district': t.district,
+            'office_label': t.office_label,
             'branches': [{'id': b.id, 'code': b.code, 'name': b.name}
                          for b in branches]}
+
+
+class TenantHeaderPatch(BaseModel):
+    """ترويسة المعلومية الرسمية (0.14.0) — صلاحية settings.manage."""
+    address: str = Field(default='', max_length=200)
+    district: str = Field(default='', max_length=80)
+    office_label: str = Field(default='', max_length=40)
+
+
+@router.patch('/tenant/header')
+def patch_tenant_header(body: TenantHeaderPatch,
+                        db: Session = Depends(get_db),
+                        pr: Principal = Depends(require_perm('settings.manage'))):
+    t = db.get(m.Tenant, pr.tenant_id)
+    before = {'address': t.address, 'district': t.district,
+              'office_label': t.office_label}
+    t.address, t.district, t.office_label = (
+        body.address, body.district, body.office_label)
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='org', action='tenant.header_update', entity='tenants',
+          entity_id=t.id, before=before, after={
+              'address': t.address, 'district': t.district,
+              'office_label': t.office_label})
+    db.commit()
+    return {'address': t.address, 'district': t.district,
+            'office_label': t.office_label}
 
 
 @router.get('/permissions')

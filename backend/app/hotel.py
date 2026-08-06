@@ -326,7 +326,8 @@ def create_reservation(db: Session, *, tenant_id: str, branch_id: str,
                        adults: int = 1, children: int = 0,
                        source: str = 'DIRECT',
                        rate_override: Decimal | None = None,
-                       status: str = 'CONFIRMED') -> m.Reservation:
+                       status: str = 'CONFIRMED',
+                       trip: dict | None = None) -> m.Reservation:
     if departure <= arrival:
         err('HOTEL.BAD_DATES', 'تاريخ المغادرة يجب أن يكون بعد الوصول')
     guest = db.get(m.Guest, guest_id)
@@ -374,7 +375,13 @@ def create_reservation(db: Session, *, tenant_id: str, branch_id: str,
         agreed_rate=priced[0]['rate'] if priced else Decimal('0'),
         est_total=sum(p['rate'] for p in priced), created_by=actor_id,
         created_at=utcnow(),
-        confirmed_at=utcnow() if status == 'CONFIRMED' else None)
+        confirmed_at=utcnow() if status == 'CONFIRMED' else None,
+        # بيانات الرحلة للمعلومية (0.14.0) — تُملأ من الاستقبال عند الإنشاء:
+        purpose=(trip or {}).get('purpose', ''),
+        origin_gov=(trip or {}).get('origin_gov', ''),
+        origin_district=(trip or {}).get('origin_district', ''),
+        vehicle_note=(trip or {}).get('vehicle_note', ''),
+        police_notes=(trip or {}).get('police_notes', ''))
     db.add(res)
     db.flush()
     for p in priced:  # Snapshot لكل ليلة — أساس الترحيل الليلي

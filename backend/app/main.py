@@ -62,6 +62,33 @@ def _ensure_additive_columns(eng) -> None:
         if 'auth_version' not in cols:
             alters.append('ALTER TABLE users ADD COLUMN auth_version '
                           'INTEGER NOT NULL DEFAULT 0')
+    # وحدة المعلومية اليومية (ADR-0038) — ترقية غيابية
+    if 'guests' in insp.get_table_names():
+        cols = {c['name'] for c in insp.get_columns('guests')}
+        for col, ddl in (
+                ('id_type', "VARCHAR(20) NOT NULL DEFAULT ''"),
+                ('id_issue_place', "VARCHAR(80) NOT NULL DEFAULT ''"),
+                ('id_issue_date', 'DATE NULL')):
+            if col not in cols:
+                alters.append(f'ALTER TABLE guests ADD COLUMN {col} {ddl}')
+    if 'reservations' in insp.get_table_names():
+        cols = {c['name'] for c in insp.get_columns('reservations')}
+        for col, ddl in (
+                ('purpose', "VARCHAR(40) NOT NULL DEFAULT ''"),
+                ('origin_gov', "VARCHAR(60) NOT NULL DEFAULT ''"),
+                ('origin_district', "VARCHAR(60) NOT NULL DEFAULT ''"),
+                ('vehicle_note', "VARCHAR(120) NOT NULL DEFAULT ''"),
+                ('police_notes', "VARCHAR(200) NOT NULL DEFAULT ''")):
+            if col not in cols:
+                alters.append(f'ALTER TABLE reservations ADD COLUMN {col} {ddl}')
+    if 'tenants' in insp.get_table_names():
+        cols = {c['name'] for c in insp.get_columns('tenants')}
+        for col, ddl in (
+                ('address', "VARCHAR(200) NOT NULL DEFAULT ''"),
+                ('district', "VARCHAR(80) NOT NULL DEFAULT ''"),
+                ('office_label', "VARCHAR(40) NOT NULL DEFAULT ''")):
+            if col not in cols:
+                alters.append(f'ALTER TABLE tenants ADD COLUMN {col} {ddl}')
     if alters:
         with eng.begin() as conn:
             for ddl in alters:
@@ -113,7 +140,7 @@ def create_app() -> FastAPI:
     from fastapi import Depends as _Depends
     from . import licensing as _lic
     from .api import (accounting, auth, health, hotel, inventory, license,
-                      org, pos, reports, hr, assets, sync)
+                      org, police, pos, reports, hr, assets, sync)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
@@ -121,6 +148,8 @@ def create_app() -> FastAPI:
     app.include_router(accounting.router)
     app.include_router(reports.router)
     app.include_router(hotel.router, dependencies=[
+        _Depends(_lic.require_module('HOTEL'))])
+    app.include_router(police.router, dependencies=[
         _Depends(_lic.require_module('HOTEL'))])
     app.include_router(pos.router, dependencies=[
         _Depends(_lic.require_module('POS'))])

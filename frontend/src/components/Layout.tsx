@@ -12,6 +12,7 @@ const NAV = [
   { to: '/reservations', label: 'الحجوزات', icon: '📅', perm: 'reservations.view' },
   { to: '/guests', label: 'النزلاء والشركات', icon: '👤', perm: 'guests.view' },
   { to: '/night-audit', label: 'التدقيق الليلي', icon: '🌙', perm: 'frontdesk.view' },
+  { to: '/police', label: 'المعلومية اليومية', icon: '🛂', perm: 'police.report' },
   { to: '/rooms', label: 'الغرف والأسعار', icon: '🛏', perm: 'frontdesk.view' },
   { to: '/pos', label: 'شاشة البيع', icon: '🍽', perm: 'pos.sell' },
   { to: '/pos/orders', label: 'الطلبات والفواتير', icon: '🧾', perm: 'pos.view' },
@@ -123,7 +124,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.13.0 — منطق سوفت | بوابات G1..G10 ✅ + الغرف والأجنحة والمستخدمون
+          إصدار 0.14.0 — منطق سوفت | بوابات G1..G10 ✅ + المستخدمون والمعلومية
         </div>
       </aside>
 

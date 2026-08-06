@@ -109,7 +109,8 @@ HOTEL_OPS_PERMS = ['frontdesk.view', 'reservations.view', 'guests.view',
                    'corporates.view', 'reports.hotel', 'rooms.view']
 FRONTDESK_WORK = ['reservations.create', 'reservations.modify',
                   'reservations.cancel', 'guests.manage', 'checkin.do',
-                  'checkout.do', 'folio.charge', 'folio.pay', 'folio.view']
+                  'checkout.do', 'folio.charge', 'folio.pay', 'folio.view',
+                  'police.report']  # إرسال المعلومية اليومية — واجب الاستقبال
 
 # صلاحيات نقاط البيع (ملف 04 — §3 قواعد صارمة: void/خصم فوق الحد بصلاحية)
 POS_OPS_PERMS = ['pos.view', 'pos.tables.view', 'pos.zreport.view',
@@ -162,7 +163,8 @@ ROLES = [
  ('RECEPTIONIST', 'موظف استقبال', 'حجوزات وتسكين وتحصيل',
   HOTEL_OPS_PERMS + FRONTDESK_WORK + ['folio.discount']),
  ('NIGHT_AUDITOR', 'مدقق ليلي', 'إجراء إقفال يوم العمل',
-  HOTEL_OPS_PERMS + ['nightaudit.run', 'journals.view', 'folio.view']),
+  HOTEL_OPS_PERMS + ['nightaudit.run', 'journals.view', 'folio.view',
+                     'police.report']),  # يعمل ليلاً — يرسل المعلومية غالباً
  ('HOUSEKEEPING', 'موظفة طابق', 'تنظيف الغرف: Dirty→Cleaning→Clean',
   ['frontdesk.view', 'rooms.view', 'hk.cleaning']),
  ('HK_SUPERVISOR', 'مشرف طوابق', 'فحص الغرف ومناطق التعطيل',
