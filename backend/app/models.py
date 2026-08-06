@@ -77,6 +77,17 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # اعتماد مدير فوري بـ PIN في نقاط البيع (ملف 04 §3) — مخزن مجزأ argon2
     pos_pin_hash: Mapped[str] = mapped_column(String(300), default='')
+    # إدارة المستخدمين والصلاحيات (ADR-0037): استثناءات فردية فوق الأدوار —
+    # المنح تضاف لأتحاد الأدوار والحجب يغلّبها («*» المالك مقدّس لا يُحجب) —
+    # ونوافذ دخول بالدوام [{from:'08:00',to:'16:00'}] (فارغة = بلا قيد) —
+    # وإلزام تغيير كلمة المرور المؤقتة عند أول دخول.
+    grants: Mapped[list] = mapped_column(JSONType, default=list)
+    denies: Mapped[list] = mapped_column(JSONType, default=list)
+    login_windows: Mapped[list] = mapped_column(JSONType, default=list)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    # نسخة إبطال الجلسات: تُرفع عند إعادة كلمة/سحب جلسات/إيقاف ← تموت كل
+    # رموز الوصول القديمة فوراً (لا تنتظر انقضاء 15 دقيقة).
+    auth_version: Mapped[int] = mapped_column(Integer, default=0)
 
     roles: Mapped[list['UserRole']] = relationship(back_populates='user',
                                                    cascade='all,delete')

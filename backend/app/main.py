@@ -34,17 +34,34 @@ def _ensure_additive_columns(eng) -> None:
     تأخذها كاملة بمفاتيح أجنبية عبر create_all؛ هنا ALTER خفيف بلا FK للقائم."""
     from sqlalchemy import inspect, text
     insp = inspect(eng)
-    if 'rooms' not in insp.get_table_names():
-        return
-    cols = {c['name'] for c in insp.get_columns('rooms')}
     alters = []
-    if 'kind' not in cols:
-        alters.append(
-            "ALTER TABLE rooms ADD COLUMN kind VARCHAR(12) "
-            "NOT NULL DEFAULT 'STANDARD'")
-    if 'parent_room_id' not in cols:
-        alters.append('ALTER TABLE rooms ADD COLUMN parent_room_id '
-                      'VARCHAR(36) NULL')
+    if 'rooms' in insp.get_table_names():
+        cols = {c['name'] for c in insp.get_columns('rooms')}
+        if 'kind' not in cols:
+            alters.append(
+                "ALTER TABLE rooms ADD COLUMN kind VARCHAR(12) "
+                "NOT NULL DEFAULT 'STANDARD'")
+        if 'parent_room_id' not in cols:
+            alters.append('ALTER TABLE rooms ADD COLUMN parent_room_id '
+                          'VARCHAR(36) NULL')
+    if 'users' in insp.get_table_names():
+        # إدارة المستخدمين والصلاحيات (ADR-0037) — ترقية غيابية للقواعد القائمة
+        cols = {c['name'] for c in insp.get_columns('users')}
+        if 'grants' not in cols:
+            alters.append("ALTER TABLE users ADD COLUMN grants TEXT "
+                          "NOT NULL DEFAULT '[]'")
+        if 'denies' not in cols:
+            alters.append("ALTER TABLE users ADD COLUMN denies TEXT "
+                          "NOT NULL DEFAULT '[]'")
+        if 'login_windows' not in cols:
+            alters.append("ALTER TABLE users ADD COLUMN login_windows TEXT "
+                          "NOT NULL DEFAULT '[]'")
+        if 'must_change_password' not in cols:
+            alters.append('ALTER TABLE users ADD COLUMN must_change_password '
+                          'BOOLEAN NOT NULL DEFAULT 0')
+        if 'auth_version' not in cols:
+            alters.append('ALTER TABLE users ADD COLUMN auth_version '
+                          'INTEGER NOT NULL DEFAULT 0')
     if alters:
         with eng.begin() as conn:
             for ddl in alters:
@@ -79,14 +96,17 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_err(_: Request, exc: RequestValidationError):
-        first = exc.errors()[0] if exc.errors() else {}
+        # jsonable_encoder إلزامي: سياق أخطاء Pydantic v2 قد يحمل كائنات Exception
+        from fastapi.encoders import jsonable_encoder
+        safe = jsonable_encoder(exc.errors())
+        first = safe[0] if safe else {}
         loc = ' → '.join(str(p) for p in first.get('loc', []))
         return JSONResponse(
             status_code=422,
             content={'error': {'code': 'VALIDATION.INVALID_INPUT',
                                'message_ar': 'مدخلات غير صالحة',
                                'detail': f"{loc}: {first.get('msg', '')}",
-                               'errors': exc.errors()}})
+                               'errors': safe}})
 
     # ── الموجِّهات ─────────────────────────────────────
     # حراس الوحدات (ملف 07 §5): قفل ناعم برسالة ترقية للوحدات غير المرخّصة

@@ -226,11 +226,16 @@ def hard_close_period(period_id: str, db: Session = Depends(get_db),
 def list_audit(page: int = Query(default=1, ge=1),
                page_size: int = Query(default=50, ge=1, le=200),
                module: str | None = None,
+               actor: str | None = None,
                db: Session = Depends(get_db),
                pr: Principal = Depends(require_perm('audit.view'))):
     q = select(m.AuditLog).where(m.AuditLog.tenant_id == pr.tenant_id)
     if module:
         q = q.where(m.AuditLog.module == module)
+    if actor:  # ترشيح بمستخدم محدد («ماذا فعل؟» من شاشة المستخدمين)
+        q = q.where(m.AuditLog.actor_user_id.in_(
+            select(m.User.id).where(m.User.tenant_id == pr.tenant_id,
+                                    m.User.username == actor)))
     total = db.execute(select(func.count()).select_from(q.subquery())).scalar_one()
     rows = db.execute(q.order_by(m.AuditLog.id.desc())
                       .offset((page - 1) * page_size).limit(page_size)).scalars().all()

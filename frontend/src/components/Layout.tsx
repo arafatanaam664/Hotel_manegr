@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { licApi, LicenseStatus } from '../license'
+import ChangePasswordModal from './ChangePassword'
 
 const NAV = [
   { to: '/', label: 'لوحة القيادة', icon: '◈', end: true },
@@ -35,6 +36,7 @@ const NAV = [
   { to: '/ledger', label: 'دفتر الأستاذ', icon: '📖', perm: 'reports.view' },
   { to: '/audit', label: 'سجل التدقيق', icon: '🛡', perm: 'audit.view' },
   { to: '/sync', label: 'مركز المزامنة', icon: '🔄', perm: 'sync.view' },
+  { to: '/users', label: 'المستخدمون والصلاحيات', icon: '👥', perm: 'users.manage' },
   { to: '/license', label: 'حالة الترخيص', icon: '🔑' },
 ]
 
@@ -92,6 +94,7 @@ function LicenseBanner() {
 export default function Layout() {
   const { session, logout, has } = useAuth()
   const nav = useNavigate()
+  const [cpOpen, setCpOpen] = useState(false)
   return (
     <div className="min-h-screen bg-slate-100 flex">
       {/* الشريط الجانبي */}
@@ -120,7 +123,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.12.0 — منطق سوفت | بوابات G1..G10 ✅ + الغرف والأسعار والأجنحة
+          إصدار 0.13.0 — منطق سوفت | بوابات G1..G10 ✅ + الغرف والأجنحة والمستخدمون
         </div>
       </aside>
 
@@ -135,6 +138,13 @@ export default function Layout() {
             </span>
           </div>
           <button
+            onClick={() => setCpOpen(true)}
+            className="text-sm text-sijill-700 hover:bg-sijill-50 px-3 py-1.5 rounded-lg transition-colors"
+            title="تغيير كلمة المرور الخاصة بي"
+          >
+            🔑 كلمة المرور
+          </button>
+          <button
             onClick={async () => { await logout(); nav('/login') }}
             className="text-sm text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
           >
@@ -146,6 +156,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      {cpOpen && <ChangePasswordModal onClose={() => setCpOpen(false)}
+        onDone={async () => { setCpOpen(false); await logout(); nav('/login') }} />}
     </div>
   )
 }

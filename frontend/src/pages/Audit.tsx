@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { Badge, Btn, Card, ErrorNote, OkNote, Spinner } from '../components/ui'
 import type { AuditItem, Paged } from '../types'
@@ -10,10 +11,17 @@ const ACTION_AR: Record<string, string> = {
   'journal.post': 'ترحيل قيد', 'journal.reverse': 'عكس قيد',
   'period.close': 'إغلاق فترة', 'auth.login.success': 'دخول ناجح',
   'auth.login.failed': 'دخول فاشل', 'auth.refresh.reuse_detected': 'اشتباه سرقة رمز!',
-  'auth.logout': 'خروج', 'user.create': 'إنشاء مستخدم', 'user.toggle_active': 'تفعيل/إيقاف مستخدم',
+  'auth.logout': 'خروج', 'auth.outside_shift': 'دخول خارج الدوام!',
+  'auth.password_changed': 'تغيير كلمة مرور',
+  'user.create': 'إنشاء مستخدم', 'user.update': 'تعديل مستخدم',
+  'user.toggle_active': 'تفعيل/إيقاف مستخدم', 'user.reset_password': 'إعادة تعيين كلمة مرور',
+  'user.unlock': 'فك قفل حساب', 'user.revoke_sessions': 'إبطال جلسات مستخدم',
+  'role.create': 'إنشاء دور', 'role.update': 'تعديل دور', 'role.delete': 'حذف دور',
 }
 
 export default function Audit() {
+  const [params] = useSearchParams()
+  const actor = params.get('actor') ?? ''
   const [data, setData] = useState<(Paged<AuditItem> & { chain_records?: number }) | null>(null)
   const [page, setPage] = useState(1)
   const [verify, setVerify] = useState<string | null>(null)
@@ -22,9 +30,10 @@ export default function Audit() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api<Paged<AuditItem> & { chain_records?: number }>(`/api/audit?page=${page}&page_size=50`)
+    const actorQ = actor ? `&actor=${encodeURIComponent(actor)}` : ''
+    api<Paged<AuditItem> & { chain_records?: number }>(`/api/audit?page=${page}&page_size=50${actorQ}`)
       .then(setData)
-  }, [page])
+  }, [page, actor])
 
   async function runVerify() {
     setBusy(true); setVerify(null); setErr(null)
@@ -53,6 +62,17 @@ export default function Audit() {
         {verify && (verifyOk ? <OkNote msg={verify} /> : <ErrorNote msg={verify} />)}
         <ErrorNote msg={err} />
       </Card>
+
+      {actor && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm">
+          <span>مرشَّح على المستخدم:</span>
+          <span className="num font-bold">{actor}</span>
+          <span className="text-xs text-slate-400">— «ماذا فعل هذا الموظف؟» بالكامل</span>
+          <Link to="/audit" className="mr-auto text-xs text-sijill-700 hover:underline font-bold">
+            ✕ إظهار الكل
+          </Link>
+        </div>
+      )}
 
       <Card>
         {!data ? <Spinner /> : (

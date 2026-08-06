@@ -138,7 +138,7 @@ ROLES = [
  ('OWNER', 'مالك', 'كل الصلاحيات', ['*']),
  ('GM', 'مدير عام', 'إدارة التشغيل والتقارير والاعتمادات',
   ['reports.view', 'accounts.view', 'journals.view', 'journals.post',
-   'journals.reverse', 'periods.close', 'settings.manage']
+   'journals.reverse', 'periods.close', 'settings.manage', 'users.manage']
   + HOTEL_OPS_PERMS + FRONTDESK_WORK + POS_OPS_PERMS + POS_WORK
   + POS_SUPERVISOR_EXTRA + INV_VIEW + INV_GM
   + ['corporates.manage', 'checkout.credit_transfer', 'discounts.approve',
@@ -573,7 +573,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
     for code, name, desc, perms in ROLES:
         rid = new_uuid()
         db.add(m.Role(id=rid, tenant_id=tid, code=code, name=name,
-                      description=desc, permissions=perms))
+                      description=desc, permissions=perms, is_system=True))
         role_ids[code] = rid
     uid = new_uuid()
     admin = m.User(id=uid, tenant_id=tid, username=admin_username,
@@ -1065,9 +1065,13 @@ def ensure_hotel_upgrade(db: Session) -> dict:
                                  m.Role.code == code)).scalar_one_or_none()
         if role is None:
             db.add(m.Role(id=new_uuid(), tenant_id=tenant.id, code=code,
-                          name=name, description=desc, permissions=perms))
+                          name=name, description=desc, permissions=perms,
+                          is_system=True))
             out['roles_updated'].append(f'added:{code}')
         else:
+            if not role.is_system:  # ترقية غيابية: الأدوار النظامية محمية
+                role.is_system = True
+                out['roles_updated'].append(f'marked-system:{code}')
             merged = sorted(set(role.permissions or []) | set(perms))
             if merged != sorted(role.permissions or []):
                 role.permissions = merged

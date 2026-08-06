@@ -29,11 +29,11 @@ def _now() -> datetime:
 
 
 def create_access_token(*, user_id: str, tenant_id: str, perms: list[str],
-                        branch_ids: list[str]) -> str:
+                        branch_ids: list[str], auth_version: int = 0) -> str:
     s = get_settings()
     payload = {
         'sub': user_id, 'tid': tenant_id, 'perms': perms, 'branches': branch_ids,
-        'iss': s.jwt_issuer, 'type': 'access',
+        'iss': s.jwt_issuer, 'type': 'access', 'av': auth_version,
         'iat': _now(), 'exp': _now() + timedelta(minutes=s.access_token_minutes),
         'jti': str(uuid.uuid4()),
     }

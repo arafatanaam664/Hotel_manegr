@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     roles: list[str]
     perms: list[str]
     branches: list[str]
+    must_change_password: bool = False
 
 class MeOut(UserOut):
     mfa_enabled: bool

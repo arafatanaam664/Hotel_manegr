@@ -33,16 +33,21 @@ class Principal:
 
 
 def user_perms(db: Session, user: m.User) -> list[str]:
-    if not user.roles:
-        return []
+    """الصلاحيات الفعلية (ADR-0037): أتحاد الأدوار + المنح الفردية − الحجب.
+    حجب الفرد يغلّب دوره دائماً؛ أما دور يحمل «*» (مالك) فمقدّس لا يُحجب
+    ولا يُنقَص — حماية الملكية من إيقاف ذاتي عرضي."""
     rids = [ur.role_id for ur in user.roles]
-    roles = db.execute(select(m.Role).where(m.Role.id.in_(rids))).scalars().all()
-    perms: list[str] = []
+    roles = db.execute(
+        select(m.Role).where(m.Role.id.in_(rids))).scalars().all() if rids else []
     for r in roles:
         if '*' in (r.permissions or []):
             return ['*']
-        perms.extend(r.permissions or [])
-    return sorted(set(perms))
+    perms: set[str] = set()
+    for r in roles:
+        perms |= set(r.permissions or [])
+    perms |= set(user.grants or [])
+    perms -= set(user.denies or [])
+    return sorted(perms)
 
 
 def get_principal(request: Request,
@@ -60,6 +65,11 @@ def get_principal(request: Request,
     if user is None or not user.is_active:
         raise HTTPException(401, {'error': {'code': 'AUTH.USER_INACTIVE',
                                             'message_ar': 'المستخدم غير نشط'}})
+    av = payload.get('av')
+    if av is not None and av != (user.auth_version or 0):
+        raise HTTPException(401, {'error': {
+            'code': 'AUTH.SESSION_REVOKED',
+            'message_ar': 'الجلسة أُبطلت (تغيير كلمة/سحب مدير) — سجّل الدخول من جديد'}})
     # بوابة الترخيص الرحيمة (ملف 07 §3/§5) — قبل أي منطق عمل
     from . import licensing as lic
     lic.enforce_request(db, tenant_id=user.tenant_id, username=user.username,

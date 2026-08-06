@@ -12,6 +12,7 @@ export interface UserOut {
   perms: string[]
   branches: string[]
   mfa_enabled?: boolean
+  must_change_password?: boolean
 }
 
 export interface TokenPair {
