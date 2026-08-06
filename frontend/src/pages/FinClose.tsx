@@ -75,7 +75,7 @@ export default function FinClose() {
                     <div className='mt-1 space-y-0.5'>
                       {p.status === 'OPEN' && (
                         <button type='button'
-                          className='block w-full text-[10px] text-atheer-700 hover:underline'
+                          className='block w-full text-[10px] text-sijill-700 hover:underline'
                           onClick={() => run(async () => {
                             await finApi.closePeriod(p.id)
                           }, `أُغلقت الفترة ${p.no} ليناً`)}>إغلاق لين</button>)}

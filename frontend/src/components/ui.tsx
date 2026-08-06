@@ -24,8 +24,8 @@ export function Btn({ children, kind = 'primary', ...rest }: {
   kind?: 'primary' | 'ghost' | 'danger' | 'gold'
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const cls = {
-    primary: 'bg-atheer-600 hover:bg-atheer-700 text-white',
-    gold: 'bg-gold-500 hover:bg-gold-600 text-atheer-950 font-bold',
+    primary: 'bg-sijill-600 hover:bg-sijill-700 text-white',
+    gold: 'bg-gold-500 hover:bg-gold-600 text-sijill-950 font-bold',
     ghost: 'bg-slate-100 hover:bg-slate-200 text-slate-700',
     danger: 'bg-red-600 hover:bg-red-700 text-white',
   }[kind]
@@ -60,7 +60,7 @@ export function Badge({ children, tone = 'slate' }: {
 
 export function Spinner() {
   return (
-    <div className="flex items-center justify-center py-16 text-atheer-600">
+    <div className="flex items-center justify-center py-16 text-sijill-600">
       <svg className="animate-spin h-8 w-8" viewBox="0 0 24 24" fill="none">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
         <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />

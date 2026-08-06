@@ -3,7 +3,7 @@
 # التفعيل: انسخ هذا الملف إلى .github/workflows/ci.yml من واجهة GitHub
 # (Add file → upload) أو امنح التوكن صلاحية workflows ثم حرّكه محلياً.
 
-name: CI — نواة أثير
+name: CI — نواة سِجِلّ النُّزُل
 
 on:
   push:

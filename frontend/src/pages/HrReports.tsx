@@ -168,7 +168,7 @@ export default function HrReports() {
                   <td className={`${td} font-mono`}>{fmt(c.gross)}</td>
                   <td className={`${td} font-mono font-bold`}>{fmt(c.net)}</td>
                   <td className={td}>
-                    <div className='h-2 rounded bg-atheer-200'
+                    <div className='h-2 rounded bg-sijill-200'
                       style={{ width: `${Math.max(4,
                         parseFloat(c.net) / maxCmp * 100)}%` }} />
                   </td>
@@ -272,7 +272,7 @@ export default function HrReports() {
               <div className={`text-2xl font-bold font-mono ${
                 cvr.payroll_to_revenue_pct === null ? 'text-slate-400'
                 : parseFloat(cvr.payroll_to_revenue_pct) > 40 ? 'text-red-700'
-                : 'text-atheer-700'}`}>
+                : 'text-sijill-700'}`}>
                 {cvr.payroll_to_revenue_pct === null ? '—'
                   : `${fmt(cvr.payroll_to_revenue_pct)}%`}</div>
               {cvr.payroll_to_revenue_pct !== null &&

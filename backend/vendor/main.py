@@ -95,7 +95,7 @@ def create_vendor_app() -> FastAPI:
                     'enroll_token': enroll,
                     'totp_secret': u.mfa_secret,
                     'otpauth': pyotp.TOTP(u.mfa_secret).provisioning_uri(
-                        name=u.username, issuer_name='Atheer Vendor'),
+                        name=u.username, issuer_name='MantiqSoft Vendor'),
                     'message_ar': 'امسح الرمز بتطبيق المصادقة ثم أدخل الرمز '
                                   'لإتمام التفعيل الإجباري (§7)'}
         if not body.totp_code or not totp_ok(u.mfa_secret, body.totp_code):

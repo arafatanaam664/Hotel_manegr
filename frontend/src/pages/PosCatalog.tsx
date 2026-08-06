@@ -118,7 +118,7 @@ export default function PosCatalog() {
         <div className="flex gap-1">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${tab === t ? 'bg-atheer-700 text-white border-atheer-700' : 'border-slate-300 text-slate-600'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm border ${tab === t ? 'bg-sijill-700 text-white border-sijill-700' : 'border-slate-300 text-slate-600'}`}>
               {t}
             </button>
           ))}

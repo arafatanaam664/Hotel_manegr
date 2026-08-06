@@ -7,8 +7,8 @@ export default {
         sans: ['"Segoe UI"', 'Tahoma', '"Noto Kufi Arabic"', 'Arial', 'sans-serif'],
       },
       colors: {
-        // هوية «أثير»: زمرّد عميق + ذهبي رملي
-        atheer: {
+        // هوية «سِجِلّ النُّزُل»: زمرّد عميق + ذهبي رملي
+        sijill: {
           50: '#eefaf6',
           100: '#d7f2e7',
           500: '#0e9f6e',

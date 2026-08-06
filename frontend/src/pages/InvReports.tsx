@@ -144,7 +144,7 @@ export default function InvReports() {
                   </tr>
                 ))}
                 {!sv.rows.length && <tr><td className={td} colSpan={5}>لا أرصدة</td></tr>}
-                <tr className='bg-atheer-50 font-bold'>
+                <tr className='bg-sijill-50 font-bold'>
                   <td className={td} colSpan={4}>الإجمالي</td>
                   <td className={`${td} font-mono`}>
                     {fmt(sv.rows.reduce((s, r) => s + parseFloat(r.value), 0))}</td>
@@ -177,7 +177,7 @@ export default function InvReports() {
                     <td className={`${td} font-mono`}>{fmt(r.reorder_level, 0)}</td>
                     <td className={`${td} font-mono`}>{fmt(r.safety_level, 0)}</td>
                     <td className={`${td} font-mono text-xs`}>{fmt(r.avg_daily_consumption, 2)}</td>
-                    <td className={`${td} font-mono font-bold text-atheer-700`}>{fmt(r.suggested_qty, 0)}</td>
+                    <td className={`${td} font-mono font-bold text-sijill-700`}>{fmt(r.suggested_qty, 0)}</td>
                   </tr>
                 ))}
                 {!alerts.reorder.length && <tr><td className={td} colSpan={6}>✅ لا أصناف تحت حد الطلب</td></tr>}

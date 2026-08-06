@@ -48,7 +48,7 @@ export default function Journals() {
             <tbody>
               {data.items.map((j) => (
                 <tr key={j.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 num text-atheer-700 font-medium">
+                  <td className="py-2.5 num text-sijill-700 font-medium">
                     <Link to={`/journals/${j.id}`}>{j.entry_no}</Link>
                   </td>
                   <td className="num">{j.entry_date}</td>

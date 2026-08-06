@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>لوحة أثير — الشركة</title>
+<title>لوحة منطق سوفت — الشركة</title>
 <style>
   :root{--navy:#0d1b2e;--gold:#d4af37;--bg:#f3f5f9;--ok:#1a7a3c;--warn:#b8860b;--bad:#c0392b}
   *{box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
@@ -318,7 +318,7 @@ async function dlLic(id) {
   try { const j = await api(`/api/v1/licenses/${id}/file`);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' }));
-    a.download = `atheer-${j.license_id}-S${j.serial}.license`; a.click();
+    a.download = `sijill-${j.license_id}-S${j.serial}.license`; a.click();
     okm('نُزّل ملف .license الموقّع — أرسله للعميل (وضع معزول)');
   } catch (e) { err(e.message); } }
 

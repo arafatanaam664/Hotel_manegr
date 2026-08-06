@@ -8,7 +8,7 @@ import { getRack, getReservations, hkNames, rsvStatusAr,
 
 function rackColor(r: RoomRackItem): string {
   if (r.hk_status === 'OOO' || r.hk_status === 'OOS') return 'bg-red-100 border-red-400 text-red-800'
-  if (r.occupied) return 'bg-atheer-100 border-atheer-600 text-atheer-900'
+  if (r.occupied) return 'bg-sijill-100 border-sijill-600 text-sijill-900'
   if (r.hk_status === 'DIRTY' || r.hk_status === 'CLEANING') return 'bg-amber-100 border-amber-400 text-amber-800'
   return 'bg-emerald-50 border-emerald-400 text-emerald-800'
 }
@@ -68,7 +68,7 @@ export default function FrontDesk() {
   return (
     <div className="space-y-5">
       {/* شريط تاريخ العمل */}
-      <div className="bg-gradient-to-l from-atheer-800 to-atheer-950 text-white rounded-3xl px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div className="bg-gradient-to-l from-sijill-800 to-sijill-950 text-white rounded-3xl px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
         <div>
           <div className="text-xs text-gold-400">تاريخ العمل الفندقي</div>
           <div className="text-2xl font-black num">{bd}</div>
@@ -80,7 +80,7 @@ export default function FrontDesk() {
           <div><div className="text-2xl font-black text-red-300">{stats.ooo}</div><div className="text-[11px] text-white/60">معطلة</div></div>
         </div>
         <Link to="/night-audit"
-              className="bg-gold-500 hover:bg-gold-600 text-atheer-950 font-bold px-4 py-2 rounded-xl text-sm transition-colors">
+              className="bg-gold-500 hover:bg-gold-600 text-sijill-950 font-bold px-4 py-2 rounded-xl text-sm transition-colors">
           التدقيق الليلي ←
         </Link>
       </div>
@@ -126,7 +126,7 @@ export default function FrontDesk() {
                 <div className="font-bold text-sm">{r.guest_name} — {r.room_no}</div>
                 <div className="text-xs text-slate-500">يغادر <span className="num">{r.departure_date}</span></div>
               </div>
-              <Link to={`/reservations/${r.id}`} className="text-atheer-600 text-sm hover:underline">الفوليو</Link>
+              <Link to={`/reservations/${r.id}`} className="text-sijill-600 text-sm hover:underline">الفوليو</Link>
             </div>
           ))}
         </Card>
@@ -136,7 +136,7 @@ export default function FrontDesk() {
       <Card title="لوحة الطوابق (الراك) — اضغط غرفة للهوسكيبينج">
         <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
           <span className="px-2 py-1 rounded bg-emerald-50 border border-emerald-400">شاغرة نظيفة</span>
-          <span className="px-2 py-1 rounded bg-atheer-100 border border-atheer-600">مشغولة</span>
+          <span className="px-2 py-1 rounded bg-sijill-100 border border-sijill-600">مشغولة</span>
           <span className="px-2 py-1 rounded bg-amber-100 border border-amber-400">متسخة/قيد التنظيف</span>
           <span className="px-2 py-1 rounded bg-red-100 border border-red-400">معطلة</span>
         </div>

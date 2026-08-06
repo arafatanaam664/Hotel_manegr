@@ -13,11 +13,11 @@ class VendorSettings(BaseSettings):
                                       env_file_encoding='utf-8',
                                       extra='ignore', case_sensitive=False)
 
-    app_name: str = 'Atheer Vendor Control Panel'
+    app_name: str = 'MantiqSoft Vendor Control Panel'
     version: str = '0.9.0'
     database_url: str = 'sqlite:///./vendor_dev.db'
     jwt_secret: str = 'vendor-dev-only-insecure-change-me'
-    jwt_issuer: str = 'atheer-vendor'
+    jwt_issuer: str = 'mantiqsoft-vendor'
     access_token_minutes: int = 30
 
     # سلطة التوقيع (ملف 07 §1): المفتاح الخاص يعيش هنا فقط — لا يُشحن للعملاء

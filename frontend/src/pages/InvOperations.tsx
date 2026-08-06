@@ -193,7 +193,7 @@ export default function InvOperations() {
               <tbody>
                 {issues.map((i) => (
                   <tr key={i.id} className='border-b border-slate-50'>
-                    <td className={`${td} font-mono font-bold text-atheer-700 cursor-pointer`}
+                    <td className={`${td} font-mono font-bold text-sijill-700 cursor-pointer`}
                       onClick={() => setExpanded(expanded === i.id ? null : i.id)}>{i.iss_no}</td>
                     <td className={td}>{i.from_warehouse}</td>
                     <td className={td}>{i.to_warehouse}</td>
@@ -407,7 +407,7 @@ export default function InvOperations() {
                     {counts.map((c) => (
                       <tr key={c.id} className='border-b border-slate-50 hover:bg-slate-50/70 cursor-pointer'
                         onClick={() => openCount(c).catch((e) => setErr((e as Error).message))}>
-                        <td className={`${td} font-mono font-bold text-atheer-700`}>{c.cnt_no}</td>
+                        <td className={`${td} font-mono font-bold text-sijill-700`}>{c.cnt_no}</td>
                         <td className={td}>{c.warehouse}</td>
                         <td className={td}><Badge tone={statusTone(c.status)}>{INV_STATUS_AR[c.status] ?? c.status}</Badge></td>
                         <td className={`${td} text-red-700`}>{c.status === 'POSTED' ? fmt(c.short_value) : '—'}</td>

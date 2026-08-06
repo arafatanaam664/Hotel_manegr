@@ -52,7 +52,7 @@ export default function TrialBalance() {
                 return (
                   <tr key={r.account_code}
                       className={`border-b last:border-0 hover:bg-slate-50 ${r.level <= 2 ? 'font-bold bg-slate-50/50' : ''}`}>
-                    <td className="py-2 num font-bold text-atheer-800">{r.account_code}</td>
+                    <td className="py-2 num font-bold text-sijill-800">{r.account_code}</td>
                     <td>
                       <span style={{ paddingRight: `${(r.level - 1) * 22}px` }}>{r.account_name}</span>
                     </td>
@@ -71,10 +71,10 @@ export default function TrialBalance() {
               )}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-slate-400 font-black bg-atheer-50">
+              <tr className="border-t-2 border-slate-400 font-black bg-sijill-50">
                 <td colSpan={2} className="py-3">الإجماليات (الحسابات الورقية)</td>
-                <td className="num text-atheer-800">{fmt(tb.total_debit)}</td>
-                <td className="num text-atheer-800">{fmt(tb.total_credit)}</td>
+                <td className="num text-sijill-800">{fmt(tb.total_debit)}</td>
+                <td className="num text-sijill-800">{fmt(tb.total_credit)}</td>
                 <td />
               </tr>
             </tfoot>

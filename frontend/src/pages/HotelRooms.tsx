@@ -88,7 +88,7 @@ export default function HotelRoomsPage() {
         <h2 className="text-xl font-black ml-4">🛏 الغرف والأسعار</h2>
         {TABS.map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition ${tab === t.k ? 'bg-atheer-600 text-white border-atheer-600' : 'bg-white hover:bg-slate-50'}`}>
+                  className={`px-3 py-1.5 rounded-full text-sm border transition ${tab === t.k ? 'bg-sijill-600 text-white border-sijill-600' : 'bg-white hover:bg-slate-50'}`}>
             {t.label}
           </button>
         ))}

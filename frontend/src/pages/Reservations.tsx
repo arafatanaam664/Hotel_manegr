@@ -70,7 +70,7 @@ export default function Reservations() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 num text-atheer-700 font-bold">
+                  <td className="py-2.5 num text-sijill-700 font-bold">
                     <Link to={`/reservations/${r.id}`}>{r.confirmation_no}</Link>
                   </td>
                   <td>{r.guest_name}{r.corporate && <span className="text-xs text-slate-400"> — {r.corporate}</span>}</td>

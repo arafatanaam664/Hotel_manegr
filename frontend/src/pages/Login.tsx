@@ -26,12 +26,12 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-atheer-950 flex items-center justify-center p-4"
+    <div className="min-h-screen bg-sijill-950 flex items-center justify-center p-4"
          style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, #0a684955, transparent 45%), radial-gradient(circle at 80% 70%, #d4af3722, transparent 40%)' }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-5xl font-black text-gold-400 tracking-widest">أثـيــر</div>
-          <div className="text-white/60 mt-2 text-sm">نظام محاسبة الضيافة المتكامل — النواة المحاسبية</div>
+          <div className="text-4xl font-black text-gold-400 tracking-wide">سِجِلّ النُّزُل</div>
+          <div className="text-white/60 mt-2 text-sm">نظام إدارة الفنادق المتكامل — من تطوير منطق سوفت</div>
         </div>
         <form onSubmit={submit} className="bg-white rounded-3xl shadow-2xl p-8 space-y-5">
           <h1 className="text-xl font-bold text-slate-800 text-center">تسجيل الدخول</h1>
@@ -45,7 +45,7 @@ export default function Login() {
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-atheer-500 focus:border-atheer-500"
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sijill-500 focus:border-sijill-500"
               autoFocus required autoComplete="username"
             />
           </label>
@@ -54,13 +54,13 @@ export default function Login() {
             <input
               type="password" value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-atheer-500 focus:border-atheer-500"
+              className="w-full border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-sijill-500 focus:border-sijill-500"
               required autoComplete="current-password"
             />
           </label>
           <button
             type="submit" disabled={busy}
-            className="w-full bg-atheer-600 hover:bg-atheer-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-60"
+            className="w-full bg-sijill-600 hover:bg-sijill-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-60"
           >
             {busy ? 'جارٍ التحقق…' : 'دخول'}
           </button>
@@ -70,7 +70,7 @@ export default function Login() {
           </div>
         </form>
         <div className="text-center text-white/30 text-xs mt-6">
-          Atheer Hospitality ERP © 2026 — إصدار النواة G1
+          Sijill Al-Nuzul Hotel ERP © 2026 — MantiqSoft منطق سوفت
         </div>
       </div>
     </div>

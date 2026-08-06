@@ -55,7 +55,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* بطاقة الجهة */}
-      <div className="bg-gradient-to-l from-atheer-800 to-atheer-950 text-white rounded-3xl p-6 shadow-lg flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-gradient-to-l from-sijill-800 to-sijill-950 text-white rounded-3xl p-6 shadow-lg flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black">{tenant.trade_name || tenant.legal_name}</h1>
           <div className="text-white/70 text-sm mt-1">
@@ -79,7 +79,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <div className="text-sm text-slate-500">إجمالي القيود المرحَّلة</div>
-          <div className="text-3xl font-black text-atheer-700 mt-2 num">{journals?.total ?? '—'}</div>
+          <div className="text-3xl font-black text-sijill-700 mt-2 num">{journals?.total ?? '—'}</div>
         </Card>
         <Card>
           <div className="text-sm text-slate-500">ميزان اليوم (مدين = دائن)</div>
@@ -111,7 +111,7 @@ export default function Dashboard() {
 
       {/* أحدث القيود */}
       <Card title="أحدث القيود"
-            actions={<Link to="/journals" className="text-sm text-atheer-600 hover:underline">كل القيود ←</Link>}>
+            actions={<Link to="/journals" className="text-sm text-sijill-600 hover:underline">كل القيود ←</Link>}>
         {!journals ? <Spinner /> : journals.items.length === 0 ? (
           <div className="text-center text-slate-400 py-6">
             لا قيود بعد — جرّب «تشغيل الشهر الفندقي التجريبي» أو أنشئ قيداً يدوياً
@@ -131,7 +131,7 @@ export default function Dashboard() {
             <tbody>
               {journals.items.map((j) => (
                 <tr key={j.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="py-2.5 num text-atheer-700 font-medium">
+                  <td className="py-2.5 num text-sijill-700 font-medium">
                     <Link to={`/journals/${j.id}`}>{j.entry_no}</Link>
                   </td>
                   <td className="num">{j.entry_date}</td>

@@ -8,16 +8,16 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8',
                                       extra='ignore', case_sensitive=False)
 
-    app_name: str = 'Atheer Hospitality ERP'
-    version: str = '0.11.0'
+    app_name: str = 'Sijill Al-Nuzul Hotel ERP'
+    version: str = '0.12.0'
     deployment_mode: str = 'local'            # local | cloud | hybrid
 
     # قاعدة البيانات: افتراضي SQLite ملف بجوار المشروع، والإنتاج PostgreSQL
-    database_url: str = 'sqlite:///./atheer_dev.db'
+    database_url: str = 'sqlite:///./sijill_dev.db'
 
     # الأمن — يجب ضبطها في الإنتاج (يمنع الشحن بقيم افتراضية في وضع cloud)
     jwt_secret: str = 'dev-only-insecure-secret-change-me'
-    jwt_issuer: str = 'atheer'
+    jwt_issuer: str = 'sijill'
     access_token_minutes: int = 15
     refresh_token_days: int = 7
 

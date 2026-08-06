@@ -29,7 +29,7 @@ export default function Accounts() {
             <input
               value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="بحث بالكود أو الاسم…"
-              className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-atheer-500"
+              className="border border-slate-300 rounded-xl px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-sijill-500"
             />
           }>
       <table className="w-full text-sm">
@@ -45,7 +45,7 @@ export default function Accounts() {
         <tbody>
           {filtered.map((a) => (
             <tr key={a.id} className={`border-b last:border-0 hover:bg-slate-50 ${a.is_postable ? '' : 'bg-slate-50/60'}`}>
-              <td className="py-2 num font-bold text-atheer-800">{a.code}</td>
+              <td className="py-2 num font-bold text-sijill-800">{a.code}</td>
               <td>
                 <span style={{ paddingRight: `${(a.level - 1) * 22}px` }}
                       className={a.is_postable ? '' : 'font-bold text-slate-600'}>

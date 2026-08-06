@@ -497,7 +497,7 @@ def test_usb_export_import_tamper_and_wrong_password(site_cloud):
     db.commit()
     packet = SK.export_usb(db, sc['site'], 'usb-secret-1',
                            sc['seed']['tenant_id'])
-    assert packet['kind'] == 'ATHEER_SYNC_USB' and packet['events'] == 2
+    assert packet['kind'] == 'SIJILL_SYNC_USB' and packet['events'] == 2
     # كلمة مرور خاطئة
     cdb = sc['cloud_factory']()
     with pytest.raises(ValueError):

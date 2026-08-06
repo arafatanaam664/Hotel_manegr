@@ -99,7 +99,7 @@ def _revoke(a):
 
 
 def main():
-    p = argparse.ArgumentParser(description='أداة سلطة تراخيص أثير')
+    p = argparse.ArgumentParser(description='أداة سلطة تراخيص منطق سوفت (سِجِلّ النُّزُل)')
     sub = p.add_subparsers(dest='cmd', required=True)
     g = sub.add_parser('gen-keys')
     g.add_argument('--out-dir', required=True)

@@ -113,7 +113,7 @@ export default function JournalDetail() {
             {je.lines.map((l) => (
               <tr key={l.line_no} className="border-b last:border-0">
                 <td className="py-2.5 num text-slate-400">{l.line_no}</td>
-                <td><span className="num font-bold text-atheer-800">{l.account_code}</span> — {l.account_name}</td>
+                <td><span className="num font-bold text-sijill-800">{l.account_code}</span> — {l.account_name}</td>
                 <td className="num">{parseFloat(l.debit) > 0 ? fmt(l.debit) : ''}</td>
                 <td className="num">{parseFloat(l.credit) > 0 ? fmt(l.credit) : ''}</td>
                 <td className="text-slate-500">{l.description}</td>

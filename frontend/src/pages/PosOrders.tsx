@@ -113,7 +113,7 @@ export default function PosOrders() {
         <div className="flex gap-1 mr-auto">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${tab === t ? 'bg-atheer-700 text-white border-atheer-700' : 'border-slate-300 text-slate-600'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm border ${tab === t ? 'bg-sijill-700 text-white border-sijill-700' : 'border-slate-300 text-slate-600'}`}>
               {t}
             </button>
           ))}
@@ -180,7 +180,7 @@ export default function PosOrders() {
                 {(kdsByStation[st] || []).map((l) => (
                   <div key={l.id} className="border border-slate-200 rounded-xl p-2.5 flex justify-between items-center">
                     <div>
-                      <div className="font-bold">{l.item_name} <span className="text-atheer-700">×{fmt(l.qty, 0)}</span></div>
+                      <div className="font-bold">{l.item_name} <span className="text-sijill-700">×{fmt(l.qty, 0)}</span></div>
                       {l.modifiers.length > 0 && (
                         <div className="text-[11px] text-amber-700">{l.modifiers.map((m) => m.name).join('، ')}</div>
                       )}
@@ -217,7 +217,7 @@ export default function PosOrders() {
                   <td className="font-bold">{fmt(iv.net_total)}</td>
                   <td>{fmt(iv.discount_total)}</td>
                   <td className="text-left">
-                    <button className="text-atheer-700 text-xs underline ml-2"
+                    <button className="text-sijill-700 text-xs underline ml-2"
                       onClick={async () => setViewInv(await posApi.invoice(iv.id))}>عرض</button>
                     {tab === 'الفواتير' && has('pos.return') && (
                       <button className="text-red-600 text-xs underline"

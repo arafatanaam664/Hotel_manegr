@@ -234,7 +234,7 @@ export default function HrTime() {
                       onClick={() => { const s = new Set(rosDays)
                         if (s.has(d)) s.delete(d); else s.add(d); setRosDays(s) }}
                       className={`px-2 py-1 text-xs rounded-lg border font-mono ${rosDays.has(d)
-                        ? 'bg-atheer-600 text-white border-atheer-600'
+                        ? 'bg-sijill-600 text-white border-sijill-600'
                         : 'bg-white border-slate-300'}`}>
                       {d.slice(8)}</button>))}
               </div>

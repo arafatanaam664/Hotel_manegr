@@ -1,7 +1,7 @@
 // عميل API: مركزية أخطاء موحّدة + تجديد تلقائي لرمز الوصول عند 401
 import type { TokenPair } from './types'
 
-const LS_KEY = 'atheer.session'
+const LS_KEY = 'sijill.session'
 
 export interface Session {
   access_token: string

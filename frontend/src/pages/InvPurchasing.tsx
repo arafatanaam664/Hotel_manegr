@@ -146,11 +146,11 @@ export default function InvPurchasing() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xl font-black text-atheer-950">دورة المشتريات</h2>
+        <h2 className="text-xl font-black text-sijill-950">دورة المشتريات</h2>
         <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 flex-wrap">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${tab === t ? 'bg-atheer-600 text-white font-bold' : 'text-slate-600 hover:bg-slate-100'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${tab === t ? 'bg-sijill-600 text-white font-bold' : 'text-slate-600 hover:bg-slate-100'}`}>
               {t}
             </button>
           ))}
@@ -188,7 +188,7 @@ export default function InvPurchasing() {
               <tbody>
                 {prs.map((p) => (
                   <tr key={p.id} className="border-b border-slate-50">
-                    <td className={`${td} font-mono font-bold text-atheer-700`}>{p.pr_no}</td>
+                    <td className={`${td} font-mono font-bold text-sijill-700`}>{p.pr_no}</td>
                     <td className={td}>{p.department}</td>
                     <td className={`${td} text-xs`}>{p.lines.map((l) => `${l.item_code}×${fmt(l.qty, 0)}`).join('، ')}</td>
                     <td className={td}><Badge tone={statusTone(p.status)}>{INV_STATUS_AR[p.status] ?? p.status}</Badge></td>
@@ -249,7 +249,7 @@ export default function InvPurchasing() {
                 {pos.map((p) => (
                   <Fragment key={p.id}>
                     <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                      <td className={`${td} font-mono font-bold text-atheer-700 cursor-pointer`}
+                      <td className={`${td} font-mono font-bold text-sijill-700 cursor-pointer`}
                         onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
                         {expanded === p.id ? '▾' : '▸'} {p.po_no}</td>
                       <td className={td}>{p.supplier}</td>
@@ -377,7 +377,7 @@ export default function InvPurchasing() {
                 {grns.map((g) => (
                   <Fragment key={g.id}>
                     <tr key={g.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                      <td className={`${td} font-mono font-bold text-atheer-700 cursor-pointer`}
+                      <td className={`${td} font-mono font-bold text-sijill-700 cursor-pointer`}
                         onClick={() => setExpanded(expanded === g.id ? null : g.id)}>
                         {expanded === g.id ? '▾' : '▸'} {g.grn_no}</td>
                       <td className={td}>{g.supplier}</td>
@@ -481,7 +481,7 @@ export default function InvPurchasing() {
                 {invs.map((si) => (
                   <Fragment key={si.id}>
                     <tr key={si.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                      <td className={`${td} font-mono font-bold text-atheer-700 cursor-pointer`}
+                      <td className={`${td} font-mono font-bold text-sijill-700 cursor-pointer`}
                         onClick={() => setExpanded(expanded === si.id ? null : si.id)}>
                         {expanded === si.id ? '▾' : '▸'} {si.sinv_no}</td>
                       <td className={td}>{si.supplier_invoice_no}</td>

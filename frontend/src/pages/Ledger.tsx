@@ -77,9 +77,9 @@ export default function Ledger() {
               <div className="text-xs text-slate-400">عدد الحركات</div>
               <div className="num font-bold mt-1">{led.rows.length}</div>
             </div>
-            <div className="bg-atheer-50 rounded-xl p-3">
+            <div className="bg-sijill-50 rounded-xl p-3">
               <div className="text-xs text-slate-400">رصيد ختامي</div>
-              <div className="num font-bold mt-1 text-atheer-800">{fmt(led.closing_balance)}</div>
+              <div className="num font-bold mt-1 text-sijill-800">{fmt(led.closing_balance)}</div>
             </div>
           </div>
           <table className="w-full text-sm">
@@ -96,7 +96,7 @@ export default function Ledger() {
             <tbody>
               {led.rows.map((r, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="py-2 num text-atheer-700">{r.entry_no}</td>
+                  <td className="py-2 num text-sijill-700">{r.entry_no}</td>
                   <td className="num">{r.entry_date}</td>
                   <td className="max-w-[280px] truncate">{r.narration}</td>
                   <td className="num">{parseFloat(r.debit) > 0 ? fmt(r.debit) : ''}</td>

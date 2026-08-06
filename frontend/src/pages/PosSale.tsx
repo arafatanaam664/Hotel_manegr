@@ -239,7 +239,7 @@ export default function PosSale() {
         <div className="flex gap-1">
           {(['TAKEAWAY', 'DINE_IN', 'ROOM_SERVICE'] as const).map((t) => (
             <button key={t} onClick={() => setOrderType(t)}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${orderType === t ? 'bg-atheer-700 text-white border-atheer-700' : 'border-slate-300 text-slate-600'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm border ${orderType === t ? 'bg-sijill-700 text-white border-sijill-700' : 'border-slate-300 text-slate-600'}`}>
               {t === 'TAKEAWAY' ? 'سفري' : t === 'DINE_IN' ? 'صالة' : 'خدمة غرف'}
             </button>
           ))}
@@ -282,7 +282,7 @@ export default function PosSale() {
                   {tables.map((t) => (
                     <button key={t.id} onClick={() => !t.occupied && setTableId(t.id)}
                       disabled={t.occupied}
-                      className={`px-2.5 py-1 rounded-lg text-xs border ${tableId === t.id ? 'bg-atheer-700 text-white' : t.occupied ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed' : 'border-slate-300'}`}>
+                      className={`px-2.5 py-1 rounded-lg text-xs border ${tableId === t.id ? 'bg-sijill-700 text-white' : t.occupied ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed' : 'border-slate-300'}`}>
                       {t.name}
                     </button>
                   ))}
@@ -314,7 +314,7 @@ export default function PosSale() {
                         <span className="w-8 text-center font-bold">{l.qty}</span>
                         <button onClick={() => changeQty(ix, 1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold">+</button>
                       </div>
-                      <div className="font-bold text-atheer-800">{fmt(unit * l.qty - l.discount)}</div>
+                      <div className="font-bold text-sijill-800">{fmt(unit * l.qty - l.discount)}</div>
                     </div>
                   </div>
                 )
@@ -322,7 +322,7 @@ export default function PosSale() {
             </div>
             <div className="border-t border-slate-200 p-3 space-y-2">
               <div className="flex justify-between text-lg font-black">
-                <span>الإجمالي</span><span className="text-atheer-800">{fmt(cartTotal)}</span>
+                <span>الإجمالي</span><span className="text-sijill-800">{fmt(cartTotal)}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Btn kind="ghost" onClick={fireAndKeep} disabled={busy || !cart.length || (orderType === 'DINE_IN' && !tableId)}>
@@ -364,11 +364,11 @@ export default function PosSale() {
                   const cat = cats.find((c) => c.id === it.category_id)
                   return (
                     <button key={it.id} onClick={() => addItem(it)}
-                      className="bg-white border border-slate-200 rounded-2xl p-3 text-right hover:shadow-md hover:border-atheer-300 transition-all active:scale-95">
+                      className="bg-white border border-slate-200 rounded-2xl p-3 text-right hover:shadow-md hover:border-sijill-300 transition-all active:scale-95">
                       <div className="h-1.5 rounded-full mb-2" style={{ background: cat?.color || '#94a3b8' }} />
                       <div className="font-bold text-sm leading-5 min-h-10">{it.name_ar}</div>
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-atheer-800 font-black">{fmt(it.price)}</span>
+                        <span className="text-sijill-800 font-black">{fmt(it.price)}</span>
                         {it.item_type !== 'SERVICE' && (
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${it.item_type === 'STOCK' ? 'bg-sky-50 text-sky-700' : 'bg-violet-50 text-violet-700'}`}>
                             {it.item_type === 'STOCK' ? 'مخزوني' : 'مركّب'}
@@ -395,9 +395,9 @@ export default function PosSale() {
               {availMods.map((md) => (
                 <button key={md.id}
                   onClick={() => pushLine(modFor, [md])}
-                  className="w-full flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 hover:bg-atheer-50 text-sm">
+                  className="w-full flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 hover:bg-sijill-50 text-sm">
                   <span>{md.name_ar}</span>
-                  <span className="font-bold text-atheer-800">{parseFloat(md.price) ? fmt(md.price) : 'مجاناً'}</span>
+                  <span className="font-bold text-sijill-800">{parseFloat(md.price) ? fmt(md.price) : 'مجاناً'}</span>
                 </button>
               ))}
             </div>
@@ -457,7 +457,7 @@ export default function PosSale() {
                 </div>
               ))}
               <div className="border-t border-dashed border-slate-400 my-2" />
-              <div>شكراً لزيارتكم — نظام أثير</div>
+              <div>شكراً لزيارتكم — سِجِلّ النُّزُل</div>
             </div>
             <div className="flex gap-2 mt-4 no-print">
               <Btn onClick={() => window.print()}>طباعة</Btn>
@@ -553,7 +553,7 @@ function SettleModal({ total, cartLines, rawLines, orderType,
       <div className="bg-white rounded-2xl p-6 w-[560px] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()} dir="rtl">
         <div className="flex justify-between items-center mb-4">
           <div className="font-black text-lg">تسديد الفاتورة — {cartLines} بند</div>
-          <div className="text-2xl font-black text-atheer-800">{fmt(net)}</div>
+          <div className="text-2xl font-black text-sijill-800">{fmt(net)}</div>
         </div>
 
         <div className="bg-slate-50 rounded-xl p-3 mb-3">
@@ -580,7 +580,7 @@ function SettleModal({ total, cartLines, rawLines, orderType,
               <input className="border rounded-lg px-3 py-1.5 w-32 font-bold" value={String(p.amount)}
                 onChange={(e) => setPay(ix, 'amount', e.target.value)} inputMode="decimal" />
               {p.method === 'CASH' && remain > 0 && ix === pays.length - 1 && (
-                <button className="text-xs text-atheer-700 underline"
+                <button className="text-xs text-sijill-700 underline"
                   onClick={() => setPay(ix, 'amount', (parseFloat(String(p.amount)) + remain).toFixed(4))}>
                   الباقي هنا {fmt(remain)}
                 </button>
@@ -619,7 +619,7 @@ function SettleModal({ total, cartLines, rawLines, orderType,
         ))}
 
         <div className="flex justify-between items-center text-sm mb-3">
-          <button className="text-atheer-700 text-xs underline"
+          <button className="text-sijill-700 text-xs underline"
             onClick={() => setPays((ps) => [...ps, { method: 'CARD', amount: Math.max(0, remain).toFixed(4) }])}>
             + سند دفع آخر (Split)
           </button>

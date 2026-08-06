@@ -127,11 +127,11 @@ export default function InvCatalog() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xl font-black text-atheer-950">كتالوج المخزون</h2>
+        <h2 className="text-xl font-black text-sijill-950">كتالوج المخزون</h2>
         <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t ? 'bg-atheer-600 text-white font-bold' : 'text-slate-600 hover:bg-slate-100'}`}>
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t ? 'bg-sijill-600 text-white font-bold' : 'text-slate-600 hover:bg-slate-100'}`}>
               {t}
             </button>
           ))}
@@ -182,7 +182,7 @@ export default function InvCatalog() {
               <tbody>
                 {items.map((it) => (
                   <tr key={it.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                    <td className={`${td} font-mono font-bold text-atheer-700`}>{it.code}</td>
+                    <td className={`${td} font-mono font-bold text-sijill-700`}>{it.code}</td>
                     <td className={td}>{it.name_ar}{it.track_expiry && <span title="يتتبع صلاحية"> ⏳</span>}</td>
                     <td className={td}>{it.category}</td>
                     <td className={td}>{it.base_unit}{it.alt_units.length > 0 && <span className="text-xs text-slate-400"> (+{it.alt_units.map((u) => `${u.unit}=${u.factor}`).join('، ')})</span>}</td>
@@ -263,7 +263,7 @@ export default function InvCatalog() {
               <tbody>
                 {warehouses.map((w) => (
                   <tr key={w.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                    <td className={`${td} font-mono font-bold text-atheer-700`}>{w.code}</td>
+                    <td className={`${td} font-mono font-bold text-sijill-700`}>{w.code}</td>
                     <td className={td}>{w.name_ar}{w.allow_negative && <span title="يسمح بالسالب"> ⚠️</span>}</td>
                     <td className={td}>
                       <Badge tone={w.kind === 'MAIN' ? 'blue' : w.kind === 'OUTLET' ? 'amber' : 'slate'}>
@@ -308,7 +308,7 @@ export default function InvCatalog() {
               <tbody>
                 {suppliers.map((s) => (
                   <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/70">
-                    <td className={`${td} font-mono font-bold text-atheer-700`}>{s.code}</td>
+                    <td className={`${td} font-mono font-bold text-sijill-700`}>{s.code}</td>
                     <td className={td}>{s.name}</td>
                     <td className={`${td} text-xs`}>{s.contact_person}<br />{s.phone}</td>
                     <td className={td}>{s.terms_days} يوم</td>

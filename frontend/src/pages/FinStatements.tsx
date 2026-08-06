@@ -121,7 +121,7 @@ export default function FinStatements() {
                   <td className={td}>المصاريف غير الموزعة (إدارية/تسويق/طاقة/أخرى)</td>
                   <td className={`${td} text-left`}>
                     <Money v={is_.undistributed_total} tone='text-red-700' /></td></tr>
-                <tr className='border-b border-slate-100 bg-atheer-50/70'>
+                <tr className='border-b border-slate-100 bg-sijill-50/70'>
                   <td className={`${td} font-bold`}>صافي الدخل التشغيلي GOP</td>
                   <td className={`${td} text-left`}><Money v={is_.gop} bold /></td></tr>
                 <tr className='border-b border-slate-50'>

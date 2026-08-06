@@ -78,7 +78,7 @@ export default function NightAudit() {
             : p.pending_arrivals.map((r) => (
                 <div key={r.id} className="py-2 border-b last:border-0 text-sm flex justify-between items-center">
                   <span className="num">{r.conf} — وصول {r.arrival}</span>
-                  <Link to={`/reservations/${r.id}`} className="text-atheer-600 hover:underline text-xs">حسم ←</Link>
+                  <Link to={`/reservations/${r.id}`} className="text-sijill-600 hover:underline text-xs">حسم ←</Link>
                 </div>
               ))}
         </Card>
@@ -88,7 +88,7 @@ export default function NightAudit() {
             : p.pending_departures.map((r) => (
                 <div key={r.id} className="py-2 border-b last:border-0 text-sm flex justify-between items-center">
                   <span className="num">{r.conf} — مغادرة {r.departure}</span>
-                  <Link to={`/reservations/${r.id}`} className="text-atheer-600 hover:underline text-xs">حسم ←</Link>
+                  <Link to={`/reservations/${r.id}`} className="text-sijill-600 hover:underline text-xs">حسم ←</Link>
                 </div>
               ))}
         </Card>

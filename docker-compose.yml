@@ -1,16 +1,16 @@
-# نظام أثير — تشغيل إنتاجي مرجعي (خادم + PostgreSQL)
+# سِجِلّ النُّزُل — تشغيل إنتاجي مرجعي (خادم + PostgreSQL)
 # الأمان: الأسرار عبر متغيرات بيئة (.env غير مراقَدة بـ git).
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: atheer
+      POSTGRES_USER: sijill
       POSTGRES_PASSWORD: ${DB_PASSWORD:?ضع كلمة سر قاعدة البيانات}
-      POSTGRES_DB: atheer_erp
+      POSTGRES_DB: sijill_erp
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U atheer']
+      test: ['CMD-SHELL', 'pg_isready -U sijill']
       interval: 5s
       timeout: 3s
       retries: 12
@@ -20,7 +20,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://atheer:${DB_PASSWORD}@db:5432/atheer_erp
+      DATABASE_URL: postgresql+psycopg://sijill:${DB_PASSWORD}@db:5432/sijill_erp
       JWT_SECRET: ${JWT_SECRET:?ضع سر JWT عشوائي بطول 32+ بايت}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-local}
       SEED_ON_STARTUP: ${SEED_ON_STARTUP:-false}

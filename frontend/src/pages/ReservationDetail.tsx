@@ -93,7 +93,7 @@ export default function ReservationDetail() {
             <div key={s} className="flex items-center gap-1">
               <span className={`px-3 py-1 rounded-full border ${
                 rsv.status === s || (i < ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT'].indexOf(rsv.status))
-                  ? 'bg-atheer-600 text-white border-atheer-600'
+                  ? 'bg-sijill-600 text-white border-sijill-600'
                   : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
                 {rsvStatusAr[s]}
               </span>
@@ -129,9 +129,9 @@ export default function ReservationDetail() {
               <div className="text-xs text-slate-400">المدفوعات</div>
               <div className="num font-black text-lg text-emerald-600">{fmt(folio.payments)}</div>
             </div>
-            <div className={`rounded-xl p-3 text-center ${folio.high_balance ? 'bg-red-50 border border-red-300' : 'bg-atheer-50'}`}>
+            <div className={`rounded-xl p-3 text-center ${folio.high_balance ? 'bg-red-50 border border-red-300' : 'bg-sijill-50'}`}>
               <div className="text-xs text-slate-400">الرصيد المستحق</div>
-              <div className="num font-black text-xl text-atheer-800">{fmt(folio.balance)}</div>
+              <div className="num font-black text-xl text-sijill-800">{fmt(folio.balance)}</div>
               {folio.high_balance && <Badge tone="red">فوق السقف الائتماني!</Badge>}
             </div>
           </div>

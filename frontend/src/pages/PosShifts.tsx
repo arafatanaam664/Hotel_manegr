@@ -122,7 +122,7 @@ export default function PosShifts() {
                     <td className="text-left">
                       {sh.status === 'OPEN'
                         ? <button className="text-red-600 text-xs underline" onClick={() => openClose(sh)}>إقفال + Z</button>
-                        : <button className="text-atheer-700 text-xs underline"
+                        : <button className="text-sijill-700 text-xs underline"
                             onClick={async () => setZview(((await posApi.zreport(sh.id)).zreport) || null)}>Z-Report</button>}
                     </td>
                   </tr>
@@ -135,7 +135,7 @@ export default function PosShifts() {
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {archive.map((a) => (
                 <button key={a.shift_id} onClick={() => setZview(a.zreport)}
-                  className="w-full flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 hover:bg-atheer-50 text-sm">
+                  className="w-full flex justify-between items-center border border-slate-200 rounded-xl px-3 py-2 hover:bg-sijill-50 text-sm">
                   <span>وردية {String(a.zreport.outlet)} — {String(a.zreport.business_date)}</span>
                   <span className="text-xs text-slate-500">التوقيع: {String(a.zreport.signature)}</span>
                 </button>
@@ -170,7 +170,7 @@ export default function PosShifts() {
                 <div className="flex justify-between"><span>عهدة الافتتاح</span><b>{fmt(String(live.expected_cash).replace(/[\d.+-]+$/, '') || '0') || fmt(closeFor.opening_float)}</b></div>
                 <div className="flex justify-between"><span>مبيعات نقدية</span><b>{fmt(String(live.cash_sales ?? '0'))}</b></div>
                 <div className="flex justify-between"><span>مرتجعات نقدية</span><b>{fmt(String(live.cash_refunds ?? '0'))}</b></div>
-                <div className="flex justify-between border-t pt-1"><span>المتوقع بالصندوق</span><b className="text-atheer-800">{fmt(String(live.expected_cash ?? '0'))}</b></div>
+                <div className="flex justify-between border-t pt-1"><span>المتوقع بالصندوق</span><b className="text-sijill-800">{fmt(String(live.expected_cash ?? '0'))}</b></div>
                 <div className="flex justify-between"><span>فواتير بيع / مرتجع</span><span>{String(live.invoices_sales ?? 0)} / {String(live.invoices_returns ?? 0)}</span></div>
               </div>
             )}

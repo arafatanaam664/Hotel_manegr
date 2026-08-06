@@ -780,7 +780,7 @@ def export_usb(db: Session, site: m.SyncSite, password: str,
     f = Fernet(key)
     inner = json.dumps(batch, ensure_ascii=False, default=str).encode('utf-8')
     token = f.encrypt(inner)
-    return {'kind': 'ATHEER_SYNC_USB', 'site_id': site.site_id,
+    return {'kind': 'SIJILL_SYNC_USB', 'site_id': site.site_id,
             'tenant_id': tenant_id, 'salt': base64.b64encode(salt).decode(),
             'payload_enc': token.decode(), 'sha256':
             hashlib.sha256(inner).hexdigest(), 'events': len(events)}
