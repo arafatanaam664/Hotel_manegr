@@ -182,6 +182,10 @@ def create_and_post_journal(db: Session, *, tenant_id: str, branch_id: str,
           after={'entry_no': entry.entry_no, 'type': journal_type,
                  'debit': str(td), 'date': str(entry_date)},
           business_date=entry_date)
+    # Outbox المزامنة (ملف 09 §2): التقاط القيد المرحَّل داخل المعاملة
+    # ذاتها — لا قيد بلا حدث ولا حدث بلا قيد، والدحرجة تجمعهما معاً
+    from . import synck as _sk
+    _sk.capture_journal_posting(db, entry)
     return entry
 
 

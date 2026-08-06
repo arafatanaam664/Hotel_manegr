@@ -33,6 +33,7 @@ const NAV = [
   { to: '/trial-balance', label: 'ميزان المراجعة', icon: '⚖', perm: 'reports.view' },
   { to: '/ledger', label: 'دفتر الأستاذ', icon: '📖', perm: 'reports.view' },
   { to: '/audit', label: 'سجل التدقيق', icon: '🛡', perm: 'audit.view' },
+  { to: '/sync', label: 'مركز المزامنة', icon: '🔄', perm: 'sync.view' },
   { to: '/license', label: 'حالة الترخيص', icon: '🔑' },
 ]
 
@@ -118,7 +119,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10 text-[11px] text-white/40">
-          إصدار 0.8.0 — بوابات G1..G8 ✅
+          إصدار 0.10.0 — بوابات G1..G10 ✅
         </div>
       </aside>
 

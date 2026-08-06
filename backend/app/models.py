@@ -2057,3 +2057,130 @@ class LicenseState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                  default=_hr_now,
                                                  onupdate=_hr_now)
+
+
+# ─────────────────────────── المزامنة الهجينة (ملف 09، المخطط 11-ح) ──
+class SyncSite(Base):
+    """هوية الموقع ومفاتيحه وعداداته — صف واحد لكل عقدة."""
+    __tablename__ = 'sync_site'
+    site_id: Mapped[str] = mapped_column(String(36), primary_key=True,
+                                         default=_hr_uuid)
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    cloud_url: Mapped[str] = mapped_column(String(200), default='')
+    site_token: Mapped[str] = mapped_column(String(120), default='')
+    private_key_pem: Mapped[str] = mapped_column(Text, default='')
+    public_key_pem: Mapped[str] = mapped_column(Text, default='')
+    last_ack_seq: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_push_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(String(400), default='')
+    last_gaps: Mapped[list] = mapped_column(JSONType, default=list)
+    lean_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    cycle_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    down_watermark: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class SyncEventOut(Base):
+    """Outbox الموقع — الالتقاط داخل معاملة العمل نفسها (09 §2):
+    لا حدث بلا قيد ولا قيد بلا حدث؛ لا يُحذف قبل ACK إطلاقاً."""
+    __tablename__ = 'sync_events_out'
+    id: Mapped[int] = mapped_column(BigId, primary_key=True,
+                                    autoincrement=True)
+    site_id: Mapped[str] = mapped_column(String(36), index=True, default='')
+    seq: Mapped[int] = mapped_column(BigInteger, default=0, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True, default='')
+    entity: Mapped[str] = mapped_column(String(30), index=True)
+    entity_id: Mapped[str] = mapped_column(String(64))
+    op: Mapped[str] = mapped_column(String(8))          # INSERT|UPDATE|DELETE
+    entity_version: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[dict] = mapped_column(JSONType, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                  default=_hr_now)
+    state: Mapped[str] = mapped_column(String(10), default='PENDING',
+                                       index=True)  # PENDING|SENT|ACKED
+    acked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    __table_args__ = (UniqueConstraint('site_id', 'seq',
+                                       name='uq_sync_out_seq'),)
+
+
+class SyncEventIn(Base):
+    """Inbox السحابة — الخام قبل التطبيق، فريد (site_id, seq): إعادة
+    الإرسال آمنة 100% (09 §2)، ولا حذف إلا بعد تأكيد التطبيق."""
+    __tablename__ = 'sync_events_in'
+    id: Mapped[int] = mapped_column(BigId, primary_key=True,
+                                    autoincrement=True)
+    site_id: Mapped[str] = mapped_column(String(36), index=True)
+    seq: Mapped[int] = mapped_column(BigInteger)
+    tenant_id: Mapped[str] = mapped_column(String(36), default='',
+                                           index=True)
+    entity: Mapped[str] = mapped_column(String(30), index=True)
+    entity_id: Mapped[str] = mapped_column(String(64))
+    op: Mapped[str] = mapped_column(String(8), default='INSERT')
+    entity_version: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[dict] = mapped_column(JSONType, default=dict)
+    occurred_at: Mapped[str] = mapped_column(String(40), default='')
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                  default=_hr_now)
+    applied_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    state: Mapped[str] = mapped_column(String(12), default='RECEIVED',
+                                       index=True)
+    # RECEIVED|APPLIED|HELD_GAP|HELD_SCHEMA|REPLAYED|FAILED
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (UniqueConstraint('site_id', 'seq',
+                                       name='uq_sync_in_seq'),)
+
+
+class SyncConflict(Base):
+    """صندوق التعارض (09 §4) — لا حسم صامتاً إلا بـLWW المصرّح؛ الباقي
+    قرار بشري موثق بشاشة مقارنة."""
+    __tablename__ = 'sync_conflicts'
+    id: Mapped[int] = mapped_column(BigId, primary_key=True,
+                                    autoincrement=True)
+    entity: Mapped[str] = mapped_column(String(30), index=True)
+    entity_id: Mapped[str] = mapped_column(String(64))
+    local_val: Mapped[dict] = mapped_column(JSONType, default=dict)
+    remote_val: Mapped[dict] = mapped_column(JSONType, default=dict)
+    reason: Mapped[str] = mapped_column(String(120), default='')
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                  default=_hr_now)
+    resolution: Mapped[str | None] = mapped_column(String(20),
+                                                   nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(36),
+                                                    nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
+
+class SyncEntityVersion(Base):
+    """متتبع نسخ LWW على مستوى الكيان لمستقبِل المزامنة."""
+    __tablename__ = 'sync_entity_versions'
+    site_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    entity: Mapped[str] = mapped_column(String(30), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_version: Mapped[int] = mapped_column(Integer, default=0)
+    last_op: Mapped[str] = mapped_column(String(8), default='')
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 default=_hr_now)
+
+
+class SyncSiteReg(Base):
+    """سجل المواقع المقترنة لدى المستقبِل (السحابة): مفتاح عام + رمز
+    وربط site→tenant/branch للتطبيق المباشر بلا تحويل معرفات."""
+    __tablename__ = 'sync_site_reg'
+    site_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    branch_id: Mapped[str] = mapped_column(String(36), index=True)
+    legal_name: Mapped[str] = mapped_column(String(200), default='')
+    public_key_pem: Mapped[str] = mapped_column(Text, default='')
+    site_token: Mapped[str] = mapped_column(String(120), index=True)
+    last_ack_seq: Mapped[int] = mapped_column(BigInteger, default=0)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                    default=_hr_now)

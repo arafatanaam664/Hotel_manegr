@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
     from fastapi import Depends as _Depends
     from . import licensing as _lic
     from .api import (accounting, auth, health, hotel, inventory, license,
-                      org, pos, reports, hr, assets)
+                      org, pos, reports, hr, assets, sync)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
         _Depends(_lic.require_module('POS'))])
     app.include_router(inventory.router, dependencies=[
         _Depends(_lic.require_module('INVENTORY'))])
+    app.include_router(sync.router)
     app.include_router(hr.router, dependencies=[
         _Depends(_lic.require_module('HR'))])
     app.include_router(assets.router, dependencies=[
@@ -92,6 +93,9 @@ def create_app() -> FastAPI:
     @app.on_event('startup')
     def _startup():
         Base.metadata.create_all(engine)
+        # الالتقاط الذري لـOutbox المزامنة (ملف 09 §2) — بنفس معاملة العمل
+        from . import synck as _sk
+        _sk.register_capture()
         if s.seed_on_startup:
             db = SessionLocal()
             try:

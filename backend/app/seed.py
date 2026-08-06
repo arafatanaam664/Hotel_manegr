@@ -1316,6 +1316,14 @@ for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
     if _code in ('FINANCE_MANAGER', 'GM'):
         ROLES[_i] = (_code, _name, _desc, _perms + LIC_ADMIN)
 
+# دمج صلاحيات المرحلة 10: مركز المزامنة (ملف 09)
+SYNC_PERMS = ['sync.view', 'sync.manage']
+for _i, (_code, _name, _desc, _perms) in enumerate(ROLES):
+    if _code in ('FINANCE_MANAGER', 'GM'):
+        ROLES[_i] = (_code, _name, _desc, _perms + SYNC_PERMS)
+    elif _code == 'AUDITOR':
+        ROLES[_i] = (_code, _name, _desc, _perms + ['sync.view'])
+
 
 # ════════════════════════════════════════════════════════════════════
 # زرع الأصول الثابتة التجريبية — ملف 11 (ز) (أصول وهمية للمعاينة فقط)

@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 PY=python3
-[ -x .venv/bin/python ] && PY=.venv/bin/python
+[ -x .venv/bin/python ] && PY="$PWD/.venv/bin/python"
 echo "==> لوحة الشركة على http://localhost:8100 (دخول المعاينة: director)"
 echo "    رمز TOTP الحالي للمعاينة: $($PY backend/scripts/vendor_totp.py 2>/dev/null || echo 'شغّل backend/scripts/vendor_totp.py')"
 cd backend

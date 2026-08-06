@@ -9,7 +9,7 @@ class Settings(BaseSettings):
                                       extra='ignore', case_sensitive=False)
 
     app_name: str = 'Atheer Hospitality ERP'
-    version: str = '0.8.0'
+    version: str = '0.10.0'
     deployment_mode: str = 'local'            # local | cloud | hybrid
 
     # قاعدة البيانات: افتراضي SQLite ملف بجوار المشروع، والإنتاج PostgreSQL
@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     license_grace_days: int = 30         # مهلة التجديد الافتراضية (07 §1)
     license_fingerprint_salt: str = 'atheer-dev-salt-change-me'
     emergency_export_users: str = 'admin'  # حساب الطوارئ المالي (07 §3)
+
+    # المزامنة الهجينة (ملف 09) — طرف محلي وطرف مستقبِل من قاعدة كود واحدة
+    sync_cloud_url: str = ''               # مثال https://cloud/api (فارغ=غير مقترن)
+    sync_cycle_seconds: int = 60           # §3 الافتراضي (قابل 60..86400)
+    sync_receiver_enabled: bool = False    # فعّله بنشر «السحابة»
+    sync_register_key: str = 'dev-sync-register-key-change-me'
+    sync_schema_version: str = '1'         # تعايش N و N-1 (§6)
+    vendor_edge_url: str = ''              # لوحة الشركة لسحب ترخيص/نبض
+    vendor_edge_token: str = ''
+    vendor_client_code: str = ''
 
 
 @lru_cache
