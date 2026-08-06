@@ -9,7 +9,7 @@ class Settings(BaseSettings):
                                       extra='ignore', case_sensitive=False)
 
     app_name: str = 'Atheer Hospitality ERP'
-    version: str = '0.10.0'
+    version: str = '0.11.0'
     deployment_mode: str = 'local'            # local | cloud | hybrid
 
     # قاعدة البيانات: افتراضي SQLite ملف بجوار المشروع، والإنتاج PostgreSQL

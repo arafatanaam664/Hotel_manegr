@@ -2,19 +2,69 @@
 import { api } from './api'
 
 export interface RoomType {
-  id: string; code: string; name_ar: string
+  id: string; code: string; name_ar: string; name_en: string
   capacity_adults: number; capacity_children: number; beds: string
+  amenities: string[]; display_order: number
   base_rate: string; is_active: boolean
 }
 
 export interface RoomRackItem {
   id: string; room_no: string; floor: number
-  type: string; type_code: string
+  type: string; type_code: string; base_rate: string
   hk_status: string; occupied: boolean
   ooo_reason: string | null
   ooo_from: string | null; ooo_to: string | null
   current_rsv: string | null
   blocked_for_sale: boolean
+  kind: string; is_suite: boolean
+  parent_room_no: string | null
+  components: string[]
+  is_active: boolean
+  features: string[]
+  suite_note: string | null
+}
+
+export interface RatePlan {
+  id: string; code: string; name_ar: string
+  ref_rate: string | null; includes_breakfast: boolean
+  cancel_policy: string; min_nights: number; for_corporate: boolean
+  tax_inclusive: boolean; meals_included: string[]; is_active: boolean
+}
+
+export interface CalendarEntry {
+  id: string; day: string; price: string
+  day_type: string; rate_plan: string | null
+}
+
+export interface ExtraFull {
+  id: string; code: string; name_ar: string; price: string
+  revenue_account_code: string; is_active: boolean
+}
+
+type Json = Record<string, unknown>
+const _post = <T>(path: string, body?: Json) =>
+  api<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) })
+const _patch = <T>(path: string, body: Json) =>
+  api<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
+
+export const roomsApi = {
+  createRoom: (b: Json) => _post<{ id: string; room_no: string }>('/api/hotel/rooms', b),
+  updateRoom: (id: string, b: Json) => _patch<{ id: string }>(`/api/hotel/rooms/${id}`, b),
+  components: (id: string) =>
+    api<{ suite: string; components: { id: string; room_no: string }[] }>(`/api/hotel/rooms/${id}/components`),
+  createType: (b: Json) => _post<{ id: string; code: string }>('/api/hotel/room-types', b),
+  updateType: (id: string, b: Json) => _patch<{ id: string; base_rate: string }>(`/api/hotel/room-types/${id}`, b),
+  plans: () => api<RatePlan[]>('/api/hotel/rate-plans'),
+  createPlan: (b: Json) => _post<{ id: string; code: string }>('/api/hotel/rate-plans', b),
+  updatePlan: (id: string, b: Json) => _patch<{ id: string; code: string }>(`/api/hotel/rate-plans/${id}`, b),
+  calendar: (roomType: string, from: string, to: string) =>
+    api<CalendarEntry[]>(`/api/hotel/rate-calendar?room_type=${encodeURIComponent(roomType)}&date_from=${from}&date_to=${to}`),
+  calendarBulk: (b: Json) =>
+    _post<{ days: number; created: number; updated: number }>('/api/hotel/rate-calendar/bulk', b),
+  deleteCalendar: (id: string) => api<{ deleted: boolean }>(`/api/hotel/rate-calendar/${id}`, { method: 'DELETE' }),
+  extrasAll: () => api<ExtraFull[]>('/api/hotel/extras?all=true'),
+  createExtra: (b: Json) => _post<{ id: string; code: string }>('/api/hotel/extras', b),
+  updateExtra: (id: string, b: Json) => _patch<{ id: string; price: string }>(`/api/hotel/extras/${id}`, b),
 }
 
 export interface Reservation {

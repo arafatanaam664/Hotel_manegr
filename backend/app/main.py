@@ -28,6 +28,29 @@ class SPAStaticFiles(StaticFiles):
             raise
 
 
+def _ensure_additive_columns(eng) -> None:
+    """ترحيل تكويني آمن idempotent: أعمدة جديدة بقيم افتراضية على قواعد قائمة
+    (ADR-0035: rooms.kind/parent_room_id — الأجنحة المركبة). القواعد الجديدة
+    تأخذها كاملة بمفاتيح أجنبية عبر create_all؛ هنا ALTER خفيف بلا FK للقائم."""
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    if 'rooms' not in insp.get_table_names():
+        return
+    cols = {c['name'] for c in insp.get_columns('rooms')}
+    alters = []
+    if 'kind' not in cols:
+        alters.append(
+            "ALTER TABLE rooms ADD COLUMN kind VARCHAR(12) "
+            "NOT NULL DEFAULT 'STANDARD'")
+    if 'parent_room_id' not in cols:
+        alters.append('ALTER TABLE rooms ADD COLUMN parent_room_id '
+                      'VARCHAR(36) NULL')
+    if alters:
+        with eng.begin() as conn:
+            for ddl in alters:
+                conn.execute(text(ddl))
+
+
 def create_app() -> FastAPI:
     s = get_settings()
     app = FastAPI(title=s.app_name, version=s.version,
@@ -93,6 +116,7 @@ def create_app() -> FastAPI:
     @app.on_event('startup')
     def _startup():
         Base.metadata.create_all(engine)
+        _ensure_additive_columns(engine)
         # الالتقاط الذري لـOutbox المزامنة (ملف 09 §2) — بنفس معاملة العمل
         from . import synck as _sk
         _sk.register_capture()

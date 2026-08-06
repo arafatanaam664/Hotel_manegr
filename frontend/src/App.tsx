@@ -14,6 +14,7 @@ import FrontDesk from './pages/FrontDesk'
 import Reservations from './pages/Reservations'
 import ReservationDetail from './pages/ReservationDetail'
 import NightAudit from './pages/NightAudit'
+import HotelRooms from './pages/HotelRooms'
 import Guests from './pages/Guests'
 import PosSale from './pages/PosSale'
 import PosOrders from './pages/PosOrders'
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="reservations/:id" element={<ReservationDetail />} />
         <Route path="guests" element={<Guests />} />
         <Route path="night-audit" element={<NightAudit />} />
+        <Route path="rooms" element={<HotelRooms />} />
         <Route path="pos" element={<PosSale />} />
         <Route path="pos/orders" element={<PosOrders />} />
         <Route path="pos/shifts" element={<PosShifts />} />

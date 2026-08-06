@@ -1,7 +1,7 @@
 """نقاط وحدة الفندق — ملف 12 (API_STRUCTURE) وملف 03:
 غرف/حجوزات/تدقيق ليلي/فواتير/هوسكيبينج/تقارير تشغيلية.
 قاعدة مركزية: لا أثراً مالياً خارج الخدمات في app/hotel.py (الملف 02 §6)."""
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -11,13 +11,18 @@ from .. import hotel as hs
 from .. import models as m
 from ..db import get_db
 from ..deps import Principal, require_perm
+from ..audit import audit
 from ..posting import PostingError
 from ..schemas_hotel import (CancelIn, ChargeIn, CheckInIn, CheckoutIn,
-                             CorporateIn, DepositIn, DiscountIn, GuestIn,
-                             HkChangeIn, ModifyReservationIn, PaymentIn,
-                             ReservationIn, RoomIn, RoomMoveIn, TransferCorpIn,
+                             CorporateIn, DepositIn, DiscountIn, ExtraIn,
+                             ExtraPatch, GuestIn, HkChangeIn,
+                             ModifyReservationIn, PaymentIn,
+                             RateCalendarBulk, RatePlanIn, RatePlanPatch,
+                             ReservationIn, RoomIn, RoomMoveIn, RoomPatch,
+                             RoomTypeIn, RoomTypePatch, TransferCorpIn,
                              WalkInIn)
-from ..security import decrypt_pii, encrypt_pii, mask_id, utcnow
+from ..security import (decrypt_pii, encrypt_pii, mask_id, new_uuid,
+                        utcnow)
 
 router = APIRouter(prefix='/api/hotel', tags=['hotel'])
 
@@ -89,18 +94,36 @@ def list_rooms(db: Session = Depends(get_db),
             m.Reservation.status.in_(hs.ACTIVE_RSV),
             m.Reservation.arrival_date <= bd,
             m.Reservation.departure_date > bd)).scalars().all()}
+    # الأجنحة المركبة (ADR-0035): أبناء كل جناح + حالة حجب مشتقة اليوم
+    children_map: dict[str, list] = {}
+    for room in rooms:
+        pid = getattr(room, 'parent_room_id', None)
+        if pid:
+            children_map.setdefault(pid, []).append(room.room_no)
+    room_by_id = {r.id: r for r in rooms}
+    horizon = bd + timedelta(days=1)   # حجب الليلة الحالية
     out = []
     for room in rooms:
         rt = db.get(m.RoomType, room.room_type_id)
         rsv = rsv_by_room.get(room.id)
+        parent = room_by_id.get(getattr(room, 'parent_room_id', '') or '')
         out.append({'id': room.id, 'room_no': room.room_no, 'floor': room.floor,
                     'type': rt.name_ar if rt else '—', 'type_code': rt.code if rt else '',
+                    'base_rate': str(rt.base_rate) if rt else '0',
                     'hk_status': room.hk_status,
                     'occupied': room.id in occupied,
                     'ooo_reason': room.ooo_reason,
                     'ooo_from': room.ooo_from, 'ooo_to': room.ooo_to,
                     'current_rsv': rsv.id if rsv else None,
-                    'blocked_for_sale': hs.ooo_blocks(db, room, bd, bd)})
+                    'blocked_for_sale': hs.ooo_blocks(db, room, bd, bd),
+                    'kind': getattr(room, 'kind', 'STANDARD') or 'STANDARD',
+                    'is_suite': hs.is_suite(room),
+                    'parent_room_no': parent.room_no if parent else None,
+                    'components': children_map.get(room.id, []),
+                    'is_active': room.is_active,
+                    'features': room.features or [],
+                    'suite_note': hs.suite_block_reason(
+                        db, pr.tenant_id, room, bd, horizon)})
     return {'business_date': bd, 'items': out}
 
 
@@ -115,13 +138,29 @@ def create_room(body: RoomIn, db: Session = Depends(get_db),
         m.Room.room_no == body.room_no)).scalar_one_or_none()
     if dup:
         raise PostingError('HOTEL.ROOM_EXISTS', f'الغرفة {body.room_no} موجودة')
-    from ..security import new_uuid
+    parent = None
+    if body.parent_room_no:
+        parent = _room_or_404(db, pr.tenant_id, body.parent_room_no)
+    if body.kind == hs.ROOM_KIND_SUITE and body.parent_room_no:
+        raise PostingError('HOTEL.NESTED_SUITE',
+                           'الجناح المركب لا يكون ابناً لجناح آخر')
     room = m.Room(id=new_uuid(), tenant_id=pr.tenant_id, branch_id=branch.id,
                   room_no=body.room_no, floor=body.floor,
-                  room_type_id=rt.id, features=body.features)
+                  room_type_id=rt.id, features=body.features,
+                  kind=body.kind,
+                  parent_room_id=parent.id if parent else None)
+    if parent is not None:
+        hs.assert_linkable(db, pr.tenant_id, room, parent)
     db.add(room)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='room.create', entity='rooms',
+          entity_id=room.id,
+          after={'room_no': room.room_no, 'kind': room.kind,
+                 'type': rt.code, 'floor': room.floor,
+                 'parent': parent.room_no if parent else None})
     db.commit()
-    return {'id': room.id, 'room_no': room.room_no}
+    return {'id': room.id, 'room_no': room.room_no, 'kind': room.kind}
 
 
 @router.get('/room-types')
@@ -131,20 +170,391 @@ def list_room_types(db: Session = Depends(get_db),
         m.RoomType.tenant_id == pr.tenant_id).order_by(
         m.RoomType.display_order)).scalars().all()
     return [{'id': r.id, 'code': r.code, 'name_ar': r.name_ar,
+             'name_en': r.name_en,
              'capacity_adults': r.capacity_adults,
              'capacity_children': r.capacity_children, 'beds': r.beds,
+             'amenities': r.amenities, 'display_order': r.display_order,
              'base_rate': str(r.base_rate), 'is_active': r.is_active}
             for r in rows]
 
 
 @router.get('/extras')
-def list_extras(db: Session = Depends(get_db),
+def list_extras(all: bool = False, db: Session = Depends(get_db),
                 pr: Principal = Depends(require_perm('frontdesk.view'))):
-    rows = db.execute(select(m.Extra).where(
-        m.Extra.tenant_id == pr.tenant_id,
-        m.Extra.is_active.is_(True))).scalars().all()
-    return [{'code': e.code, 'name_ar': e.name_ar, 'price': str(e.price),
+    q = select(m.Extra).where(m.Extra.tenant_id == pr.tenant_id)
+    if not all:
+        q = q.where(m.Extra.is_active.is_(True))
+    rows = db.execute(q).scalars().all()
+    return [{'id': e.id, 'code': e.code, 'name_ar': e.name_ar,
+             'price': str(e.price), 'is_active': e.is_active,
              'revenue_account_code': e.revenue_account_code} for e in rows]
+
+
+# ── إدارة الغرف: تعديل/ربط/فك/تعطيل (rooms.manage) ──────────────────
+@router.patch('/rooms/{room_id}')
+def update_room(room_id: str, body: RoomPatch,
+                db: Session = Depends(get_db),
+                pr: Principal = Depends(require_perm('rooms.manage'))):
+    room = db.get(m.Room, room_id)
+    if room is None or room.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_ROOM',
+                                            'message_ar': 'الغرفة غير موجودة'}})
+    before = {'room_no': room.room_no, 'floor': room.floor,
+              'room_type_id': room.room_type_id, 'kind': room.kind,
+              'parent_room_id': room.parent_room_id,
+              'is_active': room.is_active, 'features': room.features}
+    if body.room_no and body.room_no != room.room_no:
+        dup = db.execute(select(m.Room).where(
+            m.Room.tenant_id == pr.tenant_id,
+            m.Room.branch_id == room.branch_id,
+            m.Room.room_no == body.room_no)).scalar_one_or_none()
+        if dup:
+            raise PostingError('HOTEL.ROOM_EXISTS',
+                               f'الغرفة {body.room_no} موجودة')
+        room.room_no = body.room_no
+    if body.floor is not None:
+        room.floor = body.floor
+    if body.room_type_code:
+        rt = _room_type_or_404(db, pr.tenant_id, body.room_type_code)
+        room.room_type_id = rt.id
+    if body.features is not None:
+        room.features = body.features
+    if body.kind is not None and body.kind != room.kind:
+        if body.kind == hs.ROOM_KIND_STANDARD and \
+                hs.suite_children(db, room.id):
+            raise PostingError('HOTEL.SUITE_HAS_CHILDREN',
+                               'فكّ ربط أبناء الجناح قبل تحويله لغرفة عادية')
+        if body.kind == hs.ROOM_KIND_SUITE and room.parent_room_id:
+            raise PostingError('HOTEL.NESTED_SUITE',
+                               'فكّ ربط الغرفة بجناحها قبل جعلها جناحاً')
+        room.kind = body.kind
+    if body.set_parent:
+        new_no = (body.parent_room_no or '').strip()
+        old_pid = room.parent_room_id
+        if not new_no:
+            if old_pid:
+                hs.assert_unlinkable(db, pr.tenant_id, room)
+                room.parent_room_id = None
+        else:
+            parent = _room_or_404(db, pr.tenant_id, new_no)
+            if old_pid and old_pid != parent.id:
+                hs.assert_unlinkable(db, pr.tenant_id, room)  # فك ضمني
+            hs.assert_linkable(db, pr.tenant_id, room, parent)
+            room.parent_room_id = parent.id
+    if body.is_active is not None and body.is_active != room.is_active:
+        if not body.is_active:
+            hs.assert_unlinkable(db, pr.tenant_id, room)
+            bd = hs.get_business_date(db, pr.tenant_id)
+            future = hs.overlapping_reservations(
+                db, pr.tenant_id, room.id, bd, bd + timedelta(days=3660))
+            if future:
+                raise PostingError(
+                    'HOTEL.ROOM_HAS_BOOKINGS',
+                    f'لا يمكن تعطيل الغرفة — عليها حجز نشط '
+                    f'{future[0].confirmation_no}')
+        room.is_active = body.is_active
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='room.update', entity='rooms',
+          entity_id=room.id,
+          before=before,
+          after={'room_no': room.room_no, 'floor': room.floor,
+                 'room_type_id': room.room_type_id, 'kind': room.kind,
+                 'parent_room_id': room.parent_room_id,
+                 'is_active': room.is_active, 'features': room.features})
+    db.commit()
+    parent = db.get(m.Room, room.parent_room_id) if room.parent_room_id else None
+    return {'id': room.id, 'room_no': room.room_no, 'kind': room.kind,
+            'is_active': room.is_active,
+            'parent_room_no': parent.room_no if parent else None}
+
+
+@router.get('/rooms/{room_id}/components')
+def room_components(room_id: str, db: Session = Depends(get_db),
+                    pr: Principal = Depends(require_perm('frontdesk.view'))):
+    room = db.get(m.Room, room_id)
+    if room is None or room.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_ROOM',
+                                            'message_ar': 'الغرفة غير موجودة'}})
+    children = hs.suite_children(db, room.id)
+    return {'suite': room.room_no, 'components': [
+        {'id': c.id, 'room_no': c.room_no, 'hk_status': c.hk_status,
+         'is_active': c.is_active} for c in children]}
+
+
+# ── أنواع الغرف: إنشاء/تعديل (السعر الأساسي لليلة) ────────────────────
+@router.post('/room-types', status_code=201)
+def create_room_type(body: RoomTypeIn, db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('rooms.manage'))):
+    dup = db.execute(select(m.RoomType).where(
+        m.RoomType.tenant_id == pr.tenant_id,
+        m.RoomType.code == body.code)).scalar_one_or_none()
+    if dup:
+        raise PostingError('HOTEL.RTYPE_EXISTS', f'النوع {body.code} موجود')
+    rt = m.RoomType(id=new_uuid(), tenant_id=pr.tenant_id, code=body.code,
+                    name_ar=body.name_ar, name_en=body.name_en,
+                    capacity_adults=body.capacity_adults,
+                    capacity_children=body.capacity_children,
+                    beds=body.beds, amenities=body.amenities,
+                    base_rate=body.base_rate,
+                    display_order=body.display_order)
+    db.add(rt)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='roomtype.create', entity='room_types',
+          entity_id=rt.id,
+          after={'code': body.code, 'name_ar': body.name_ar,
+                 'base_rate': str(body.base_rate)})
+    db.commit()
+    return {'id': rt.id, 'code': rt.code}
+
+
+@router.patch('/room-types/{rt_id}')
+def update_room_type(rt_id: str, body: RoomTypePatch,
+                     db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('rooms.manage'))):
+    rt = db.get(m.RoomType, rt_id)
+    if rt is None or rt.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_ROOM_TYPE',
+                                            'message_ar': 'نوع الغرفة غير موجود'}})
+    before = {'name_ar': rt.name_ar, 'name_en': rt.name_en,
+              'base_rate': str(rt.base_rate), 'is_active': rt.is_active,
+              'capacity_adults': rt.capacity_adults,
+              'capacity_children': rt.capacity_children, 'beds': rt.beds,
+              'amenities': rt.amenities, 'display_order': rt.display_order}
+    for f in ('name_ar', 'name_en', 'capacity_adults', 'capacity_children',
+              'beds', 'amenities', 'base_rate', 'display_order', 'is_active'):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(rt, f, v)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='roomtype.update', entity='room_types',
+          entity_id=rt.id, before=before,
+          after={'name_ar': rt.name_ar, 'base_rate': str(rt.base_rate),
+                 'is_active': rt.is_active, 'beds': rt.beds,
+                 'capacity_adults': rt.capacity_adults,
+                 'capacity_children': rt.capacity_children,
+                 'amenities': rt.amenities, 'display_order': rt.display_order,
+                 'name_en': rt.name_en})
+    db.commit()
+    return {'id': rt.id, 'code': rt.code, 'base_rate': str(rt.base_rate)}
+
+
+# ── خطط الأسعار (03 §1.3) ────────────────────────────────────────────
+@router.get('/rate-plans')
+def list_rate_plans(db: Session = Depends(get_db),
+                    pr: Principal = Depends(require_perm('frontdesk.view'))):
+    rows = db.execute(select(m.RatePlan).where(
+        m.RatePlan.tenant_id == pr.tenant_id).order_by(
+        m.RatePlan.code)).scalars().all()
+    return [{'id': p.id, 'code': p.code, 'name_ar': p.name_ar,
+             'ref_rate': str(p.ref_rate) if p.ref_rate is not None else None,
+             'includes_breakfast': p.includes_breakfast,
+             'cancel_policy': p.cancel_policy, 'min_nights': p.min_nights,
+             'for_corporate': p.for_corporate,
+             'tax_inclusive': p.tax_inclusive,
+             'meals_included': p.meals_included,
+             'is_active': p.is_active} for p in rows]
+
+
+@router.post('/rate-plans', status_code=201)
+def create_rate_plan(body: RatePlanIn, db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('rates.manage'))):
+    dup = db.execute(select(m.RatePlan).where(
+        m.RatePlan.tenant_id == pr.tenant_id,
+        m.RatePlan.code == body.code)).scalar_one_or_none()
+    if dup:
+        raise PostingError('HOTEL.RPLAN_EXISTS', f'الخطة {body.code} موجودة')
+    p = m.RatePlan(id=new_uuid(), tenant_id=pr.tenant_id, code=body.code,
+                   name_ar=body.name_ar, ref_rate=body.ref_rate,
+                   includes_breakfast=body.includes_breakfast,
+                   cancel_policy=body.cancel_policy,
+                   min_nights=body.min_nights,
+                   for_corporate=body.for_corporate,
+                   tax_inclusive=body.tax_inclusive,
+                   meals_included=body.meals_included)
+    db.add(p)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='rateplan.create', entity='rate_plans',
+          entity_id=p.id,
+          after={'code': body.code, 'name_ar': body.name_ar,
+                 'ref_rate': str(body.ref_rate)})
+    db.commit()
+    return {'id': p.id, 'code': p.code}
+
+
+@router.patch('/rate-plans/{plan_id}')
+def update_rate_plan(plan_id: str, body: RatePlanPatch,
+                     db: Session = Depends(get_db),
+                     pr: Principal = Depends(require_perm('rates.manage'))):
+    p = db.get(m.RatePlan, plan_id)
+    if p is None or p.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_RATE_PLAN',
+                                            'message_ar': 'خطة سعر غير موجودة'}})
+    before = {'name_ar': p.name_ar, 'ref_rate': str(p.ref_rate),
+              'cancel_policy': p.cancel_policy, 'min_nights': p.min_nights,
+              'is_active': p.is_active}
+    for f in ('name_ar', 'ref_rate', 'includes_breakfast', 'cancel_policy',
+              'min_nights', 'for_corporate', 'tax_inclusive',
+              'meals_included', 'is_active'):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(p, f, v)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='rateplan.update', entity='rate_plans',
+          entity_id=p.id, before=before,
+          after={'name_ar': p.name_ar, 'ref_rate': str(p.ref_rate),
+                 'cancel_policy': p.cancel_policy, 'min_nights': p.min_nights,
+                 'is_active': p.is_active})
+    db.commit()
+    return {'id': p.id, 'code': p.code}
+
+
+# ── تقويم الأسعار (03 §1.4): موسم/نهاية أسبوع/مناسبة ──────────────────
+@router.get('/rate-calendar')
+def list_rate_calendar(room_type: str, date_from: date, date_to: date,
+                       rate_plan: str | None = None,
+                       db: Session = Depends(get_db),
+                       pr: Principal = Depends(require_perm('frontdesk.view'))):
+    rt = _room_type_or_404(db, pr.tenant_id, room_type)
+    q = select(m.RateCalendar).where(
+        m.RateCalendar.tenant_id == pr.tenant_id,
+        m.RateCalendar.room_type_id == rt.id,
+        m.RateCalendar.day >= date_from,
+        m.RateCalendar.day <= date_to).order_by(m.RateCalendar.day)
+    if rate_plan:
+        plan = db.execute(select(m.RatePlan).where(
+            m.RatePlan.tenant_id == pr.tenant_id,
+            m.RatePlan.code == rate_plan)).scalar_one_or_none()
+        q = q.where(m.RateCalendar.rate_plan_id ==
+                    (plan.id if plan else 'none'))
+    rows = db.execute(q).scalars().all()
+    plans = {p.id: p.code for p in db.execute(
+        select(m.RatePlan).where(
+            m.RatePlan.tenant_id == pr.tenant_id)).scalars().all()}
+    return [{'id': r.id, 'day': str(r.day), 'price': str(r.price),
+             'day_type': r.day_type,
+             'rate_plan': plans.get(r.rate_plan_id) if r.rate_plan_id
+             else None} for r in rows]
+
+
+@router.post('/rate-calendar/bulk', status_code=201)
+def set_rate_calendar(body: RateCalendarBulk,
+                      db: Session = Depends(get_db),
+                      pr: Principal = Depends(require_perm('rates.manage'))):
+    if body.date_to < body.date_from:
+        raise PostingError('HOTEL.BAD_DATES', 'النهاية قبل البداية')
+    days = (body.date_to - body.date_from).days + 1
+    if days > 92:
+        raise PostingError('HOTEL.RANGE_TOO_LONG',
+                           'المدى الأقصى للتعبئة 92 يوماً')
+    rt = _room_type_or_404(db, pr.tenant_id, body.room_type_code)
+    plan_id = None
+    if (body.rate_plan_code or '').strip():
+        plan = db.execute(select(m.RatePlan).where(
+            m.RatePlan.tenant_id == pr.tenant_id,
+            m.RatePlan.code == body.rate_plan_code)).scalar_one_or_none()
+        if plan is None:
+            raise PostingError('HOTEL.UNKNOWN_RATE_PLAN',
+                               f'خطة سعر غير موجودة: {body.rate_plan_code}')
+        plan_id = plan.id
+    created = updated = 0
+    for i in range(days):
+        day = body.date_from + timedelta(days=i)
+        q = select(m.RateCalendar).where(
+            m.RateCalendar.tenant_id == pr.tenant_id,
+            m.RateCalendar.room_type_id == rt.id,
+            m.RateCalendar.day == day)
+        q = q.where(m.RateCalendar.rate_plan_id.is_(None) if plan_id is None
+                    else m.RateCalendar.rate_plan_id == plan_id)
+        row = db.execute(q).scalar_one_or_none()
+        if row:
+            row.price = body.price
+            row.day_type = body.day_type
+            updated += 1
+        else:
+            db.add(m.RateCalendar(id=new_uuid(), tenant_id=pr.tenant_id,
+                                  room_type_id=rt.id, rate_plan_id=plan_id,
+                                  day=day, price=body.price,
+                                  day_type=body.day_type))
+            created += 1
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='ratecalendar.set', entity='rate_calendar',
+          entity_id=rt.id,
+          after={'room_type': rt.code,
+                 'rate_plan': body.rate_plan_code or None,
+                 'from': str(body.date_from), 'to': str(body.date_to),
+                 'price': str(body.price), 'day_type': body.day_type,
+                 'created': created, 'updated': updated})
+    db.commit()
+    return {'days': days, 'created': created, 'updated': updated}
+
+
+@router.delete('/rate-calendar/{entry_id}')
+def delete_rate_calendar(entry_id: str, db: Session = Depends(get_db),
+                         pr: Principal = Depends(require_perm('rates.manage'))):
+    row = db.get(m.RateCalendar, entry_id)
+    if row is None or row.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_CAL_ENTRY',
+                                            'message_ar': 'قيد تقويم غير موجود'}})
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='ratecalendar.delete',
+          entity='rate_calendar', entity_id=row.id,
+          before={'day': str(row.day), 'price': str(row.price)})
+    db.delete(row)
+    db.commit()
+    return {'deleted': True}
+
+
+# ── الخدمات الإضافية: إنشاء/تعديل (rates.manage) ───────────────────────
+@router.post('/extras', status_code=201)
+def create_extra(body: ExtraIn, db: Session = Depends(get_db),
+                 pr: Principal = Depends(require_perm('extras.manage'))):
+    dup = db.execute(select(m.Extra).where(
+        m.Extra.tenant_id == pr.tenant_id,
+        m.Extra.code == body.code)).scalar_one_or_none()
+    if dup:
+        raise PostingError('HOTEL.EXTRA_EXISTS', f'الخدمة {body.code} موجودة')
+    e = m.Extra(id=new_uuid(), tenant_id=pr.tenant_id, code=body.code,
+                name_ar=body.name_ar, price=body.price,
+                revenue_account_code=body.revenue_account_code)
+    db.add(e)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='extra.create', entity='extras',
+          entity_id=e.id, after={'code': body.code, 'price': str(body.price)})
+    db.commit()
+    return {'id': e.id, 'code': e.code}
+
+
+@router.patch('/extras/{extra_id}')
+def update_extra(extra_id: str, body: ExtraPatch,
+                 db: Session = Depends(get_db),
+                 pr: Principal = Depends(require_perm('extras.manage'))):
+    e = db.get(m.Extra, extra_id)
+    if e is None or e.tenant_id != pr.tenant_id:
+        raise HTTPException(404, {'error': {'code': 'HOTEL.UNKNOWN_EXTRA',
+                                            'message_ar': 'الخدمة غير موجودة'}})
+    before = {'name_ar': e.name_ar, 'price': str(e.price),
+              'revenue_account_code': e.revenue_account_code,
+              'is_active': e.is_active}
+    for f in ('name_ar', 'price', 'revenue_account_code', 'is_active'):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(e, f, v)
+    db.flush()
+    audit(db, tenant_id=pr.tenant_id, actor_id=pr.id, actor_type='user',
+          module='hotel', action='extra.update', entity='extras',
+          entity_id=e.id, before=before,
+          after={'name_ar': e.name_ar, 'price': str(e.price),
+                 'revenue_account_code': e.revenue_account_code,
+                 'is_active': e.is_active})
+    db.commit()
+    return {'id': e.id, 'code': e.code, 'price': str(e.price)}
 
 
 # ── الهوسكيبينج ─────────────────────────────────────────

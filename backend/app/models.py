@@ -395,6 +395,13 @@ class Room(Base):
     ooo_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     ooo_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str] = mapped_column(String(300), default='')
+    # الأجنحة المركبة (ADR-0035): STANDARD غرفة عادية | SUITE_UNIT جناح=أب
+    # وهمي بيعي. parent_room_id على الابن يشير لغرفة الجناح؛ الحجب مشتق
+    # حسابياً دائماً ولا يُخزَّن (اتساق بنيوي — ADR-0035/ملف 03).
+    kind: Mapped[str] = mapped_column(String(12), default='STANDARD',
+                                      index=True)
+    parent_room_id: Mapped[str | None] = mapped_column(
+        ForeignKey('rooms.id'), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=0)  # قفل تنافسي
 

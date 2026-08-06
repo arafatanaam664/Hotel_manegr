@@ -101,7 +101,8 @@ def _master_payload(obj, fields: list[str]) -> dict:
 
 # سجل الكيانات المزامَنة: اسم ← (الصنف، النوع، باني الحمولة/الحقول)
 ROOM_FIELDS = ['branch_id', 'room_no', 'floor', 'room_type_id', 'features',
-               'hk_status', 'ooo_reason', 'ooo_from', 'ooo_to', 'is_active']
+               'hk_status', 'ooo_reason', 'ooo_from', 'ooo_to', 'kind',
+               'parent_room_id', 'is_active']
 ITEM_FIELDS = ['code', 'name_ar', 'name_en', 'category_id', 'base_unit',
                'alt_units', 'barcode', 'reorder_level', 'safety_level',
                'inventory_account_code', 'track_expiry', 'pos_item_id',
@@ -226,6 +227,11 @@ def backfill_outbox(db: Session, tenant_id: str,
         cls = spec['cls']
         objs = db.execute(select(cls).where(
             cls.tenant_id == tenant_id)).scalars().all()
+        if name == 'ROOM':
+            # الأجنحة المركبة (ADR-0035): الآباء قبل الأبناء — فكرة FK
+            # على المستلم تفترض أسبقية الأب بنفس الدفعة.
+            objs = sorted(objs, key=lambda o: 1
+                          if getattr(o, 'parent_room_id', None) else 0)
         for o in objs:
             if not _has(name, o.id):
                 _emit(name, o.id, {})
@@ -424,7 +430,10 @@ def _store_inbox(db: Session, reg: m.SyncSiteReg, batch: dict,
             m.SyncEventIn.site_id == reg.site_id,
             m.SyncEventIn.seq == ev['seq'])).scalar_one_or_none()
         if exists:                      # إعادة إرسال — لا تكرار إطلاقاً
-            if exists.state == 'LOST_SIM':      # مارker فقدان محاكى: عبّئه
+            if exists.state in ('LOST_SIM', 'FAILED'):
+                # فقدان محاكى أو فشل تطبيق عابر: عبّئ وأعد المحاولة —
+                # لا حفرة صامتة أبداً؛ الثابت عَرضي يظهر كفجوة بلا نهاية
+                # مقصودة تُضبط بالمراقبة أو Reseed (§7-1/§7-5).
                 exists.state = 'RECEIVED'
                 exists.payload = ev.get('payload') or {}
                 exists.error = None

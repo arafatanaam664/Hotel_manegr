@@ -143,10 +143,12 @@ export default function FrontDesk() {
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-11 gap-2">
           {rack.map((r) => (
             <button key={r.id} onClick={() => setHkFor(r)}
-                    className={`border-2 rounded-xl py-2.5 px-1 text-center transition-transform hover:scale-105 ${rackColor(r)}`}>
-              <div className="font-black num">{r.room_no}</div>
-              <div className="text-[10px]">{r.type_code}</div>
+                    title={r.suite_note ?? (r.is_suite ? `جناح مركب: ${r.components.join('، ')}` : undefined)}
+                    className={`border-2 rounded-xl py-2.5 px-1 text-center transition-transform hover:scale-105 ${rackColor(r)} ${r.suite_note ? 'opacity-80 ring-2 ring-purple-300' : ''}`}>
+              <div className="font-black num">{r.is_suite ? '🏰 ' : ''}{r.room_no}</div>
+              <div className="text-[10px]">{r.type_code}{r.parent_room_no ? ` ⊂${r.parent_room_no}` : ''}</div>
               <div className="text-[10px] mt-0.5">{hkNames[r.hk_status]}</div>
+              {r.suite_note && <div className="text-[9px] mt-0.5 text-purple-700">🔒 مجدول ضمنياً</div>}
             </button>
           ))}
         </div>

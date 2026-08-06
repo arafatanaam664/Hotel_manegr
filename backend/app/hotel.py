@@ -142,10 +142,108 @@ def price_stay(db: Session, tenant_id: str, room_type_id: str,
 
 
 # ────────────────────────────────────────────────────────────────────
-# التوفر ومنع الحجز المزدوج (قبول #1)
+# التوفر ومنع الحجز المزدوج (قبول #1) + الأجنحة المركبة (ADR-0035)
 # ────────────────────────────────────────────────────────────────────
 def _overlap(d1a: date, d1b: date, d2a: date, d2b: date) -> bool:
     return d1a < d2b and d2a < d1b
+
+
+ROOM_KIND_SUITE = 'SUITE_UNIT'   # جناح مركب = غرفة «أب» بيعية
+ROOM_KIND_STANDARD = 'STANDARD'
+
+
+def is_suite(room: m.Room | None) -> bool:
+    return room is not None and (getattr(room, 'kind', None)
+                                 or ROOM_KIND_STANDARD) == ROOM_KIND_SUITE
+
+
+def suite_children(db: Session, suite_id: str) -> list[m.Room]:
+    return db.execute(select(m.Room).where(
+        m.Room.parent_room_id == suite_id,
+        m.Room.is_active.is_(True)).order_by(m.Room.room_no)
+    ).scalars().all()
+
+
+def suite_block_reason(db: Session, tenant_id: str, room: m.Room,
+                       d_from: date, d_to: date,
+                       exclude_id: str | None = None) -> str | None:
+    """حجب الأجنحة المركبة — مشتق حسابياً دائماً ولا يُخزَّن أبداً (ADR-0035):
+    الابن يُحجب بحجز/تعطيل أبيه الجناح؛ والجناح لا يُباع كاملاً إذا كانت
+    أي من غرفه محجوزة أو خارج الخدمة. أمان مضاعف للمسارات غير المغطاة."""
+    if room is None:
+        return None
+    if is_suite(room):
+        for c in suite_children(db, room.id):
+            if ooo_blocks(db, c, d_from, d_to):
+                return (f'لا يُباع الجناح {room.room_no} كاملاً — غرفته '
+                        f'{c.room_no} خارج الخدمة')
+            hits = overlapping_reservations(db, tenant_id, c.id, d_from,
+                                            d_to, exclude_id)
+            if hits:
+                return (f'لا يُباع الجناح {room.room_no} كاملاً — غرفته '
+                        f'{c.room_no} محجوزة ({hits[0].confirmation_no})')
+    else:
+        parent_id = getattr(room, 'parent_room_id', None)
+        if parent_id:
+            parent = db.get(m.Room, parent_id)
+            if is_suite(parent):
+                if ooo_blocks(db, parent, d_from, d_to):
+                    return (f'الغرفة {room.room_no} ضمن الجناح {parent.room_no}'
+                            ' وهو خارج الخدمة')
+                hits = overlapping_reservations(db, tenant_id, parent.id,
+                                                d_from, d_to, exclude_id)
+                if hits:
+                    return (f'الغرفة {room.room_no} محجوبة ضمن حجز الجناح '
+                            f'{parent.room_no} ({hits[0].confirmation_no})')
+    return None
+
+
+def assert_linkable(db: Session, tenant_id: str, child: m.Room,
+                    parent: m.Room | None) -> None:
+    """ربط غرفة بجناح — شروط بنيوية + اتساق الحجوزات النشطة بالاتجاهين
+    (لا ربط ينتج تداخلاً فيزيائياً: ADR-0035)."""
+    if parent is None or parent.tenant_id != tenant_id:
+        err('HOTEL.UNKNOWN_PARENT', 'الجناح الأب غير موجود')
+    if parent.id == child.id:
+        err('HOTEL.PARENT_SELF', 'لا يمكن ربط الغرفة بنفسها')
+    if not is_suite(parent):
+        err('HOTEL.PARENT_NOT_SUITE',
+            f'الغرفة {parent.room_no} ليست جناحاً مركباً (kind=SUITE_UNIT)')
+    if is_suite(child):
+        err('HOTEL.NESTED_SUITE', 'لا أجنحة متداخلة — الجناح لا يكون ابناً')
+    child_rsv = db.execute(select(m.Reservation).where(
+        m.Reservation.tenant_id == tenant_id,
+        m.Reservation.room_id == child.id,
+        m.Reservation.status.in_(ACTIVE_RSV))).scalars().all()
+    parent_rsv = db.execute(select(m.Reservation).where(
+        m.Reservation.tenant_id == tenant_id,
+        m.Reservation.room_id == parent.id,
+        m.Reservation.status.in_(ACTIVE_RSV))).scalars().all()
+    for cr in child_rsv:
+        for prr in parent_rsv:
+            if _overlap(cr.arrival_date, cr.departure_date,
+                        prr.arrival_date, prr.departure_date):
+                err('HOTEL.SUITE_LINK_CONFLICT',
+                    f'تداخل فعلي: حجز الغرفة {cr.confirmation_no} مع حجز '
+                    f'الجناح {prr.confirmation_no} — انقل أو ألغِ أولاً')
+
+
+def assert_unlinkable(db: Session, tenant_id: str, child: m.Room) -> None:
+    """فك ربط/تعطيل ابن ممنوع والجناح عليه حجوزات نشطة قادمة (الابن
+    مشمول فيزيائياً بها — ADR-0035)."""
+    pid = getattr(child, 'parent_room_id', None)
+    if not pid:
+        return
+    bd = get_business_date(db, tenant_id)
+    hits = db.execute(select(m.Reservation).where(
+        m.Reservation.tenant_id == tenant_id,
+        m.Reservation.room_id == pid,
+        m.Reservation.status.in_(ACTIVE_RSV),
+        m.Reservation.departure_date > bd)).scalars().all()
+    if hits:
+        err('HOTEL.SUITE_LINKED_BOOKINGS',
+            f'لا يمكن فك الربط — الجناح عليه حجز نشط {hits[0].confirmation_no}'
+            ' حتى انتهاء الفترة أو إلغاؤها')
 
 
 def overlapping_reservations(db: Session, tenant_id: str, room_id: str,
@@ -186,6 +284,8 @@ def available_rooms(db: Session, tenant_id: str, branch_id: str,
             continue
         if overlapping_reservations(db, tenant_id, room.id, d_from, d_to):
             continue
+        if suite_block_reason(db, tenant_id, room, d_from, d_to):
+            continue        # مركّب: ابن محجوب بجناحه أو جناح ناقص (ADR-0035)
         free.append(room)
     return free
 
@@ -251,6 +351,9 @@ def create_reservation(db: Session, *, tenant_id: str, branch_id: str,
             err('HOTEL.ROOM_OOO', f'الغرفة {room.room_no} خارج الخدمة في هذه الفترة')
         if overlapping_reservations(db, tenant_id, room.id, arrival, departure):
             err('HOTEL.DOUBLE_BOOKING', f'الغرفة {room.room_no} محجوزة متداخلة التواريخ')
+        sb = suite_block_reason(db, tenant_id, room, arrival, departure)
+        if sb:
+            err('HOTEL.SUITE_BLOCKED', sb)
         chosen_room = room
     else:
         _lock_room_type(db, room_type_id)
@@ -318,6 +421,10 @@ def modify_reservation(db: Session, *, res: m.Reservation, actor_id: str,
         if overlapping_reservations(db, res.tenant_id, room.id, arrival,
                                     departure, exclude_id=res.id):
             err('HOTEL.DOUBLE_BOOKING', f'الغرفة {room.room_no} محجوزة في الفترة الجديدة')
+        sb = suite_block_reason(db, res.tenant_id, room, arrival,
+                                departure, exclude_id=res.id)
+        if sb:
+            err('HOTEL.SUITE_BLOCKED', sb)
         res.room_id = room.id
 
     res.arrival_date, res.departure_date = arrival, departure
@@ -499,6 +606,10 @@ def check_in(db: Session, *, res: m.Reservation, actor_id: str,
     if room.hk_status not in ('CLEAN', 'INSPECTED') and not allow_dirty:
         err('HOTEL.ROOM_NOT_CLEAN',
             f'الغرفة {room.room_no} بحالة {room.hk_status} — التسكين يتطلب نظيفة أو استثناء بصلاحية')
+    sb = suite_block_reason(db, res.tenant_id, room, bd, res.departure_date,
+                            exclude_id=res.id)
+    if sb:
+        err('HOTEL.SUITE_BLOCKED', sb)   # أمان مضاعف للمسار اليدوي (ADR-0035)
 
     folio = _personal_folio(db, res)
     # شريحة الإقامة الفعلية
@@ -557,6 +668,10 @@ def room_move(db: Session, *, res: m.Reservation, new_room_id: str,
     if overlapping_reservations(db, res.tenant_id, new_room.id, bd,
                                 res.departure_date, exclude_id=res.id):
         err('HOTEL.DOUBLE_BOOKING', f'الغرفة {new_room.room_no} محجوزة')
+    sb = suite_block_reason(db, res.tenant_id, new_room, bd,
+                            res.departure_date, exclude_id=res.id)
+    if sb:
+        err('HOTEL.SUITE_BLOCKED', sb)
     # إغلاق الشريحة الحالية وفتح الجديدة
     cur = db.execute(
         select(m.ReservationStay).where(

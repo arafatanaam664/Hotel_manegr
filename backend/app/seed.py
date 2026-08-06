@@ -348,12 +348,15 @@ HOTEL_ROOM_TYPES = [
  ('SGL', 'غرفة مفردة', 'Single Room', 1, 1, 'سرير مفرد', 60, 1),
  ('DBL', 'غرفة مزدوجة', 'Double Room', 2, 1, 'سريران', 85, 2),
  ('SUITE', 'جناح', 'Suite', 3, 2, 'سرير كبير + صالة', 140, 3),
+ ('RSUITE', 'جناح ملكي', 'Royal Suite', 4, 2, 'سريران كبيران + صالة ملكية',
+  300, 4),
 ]
 
 HOTEL_ROOMS = [  # (room_no, type, floor)
  ('101', 'SGL', 1), ('103', 'SGL', 1), ('104', 'SGL', 1), ('105', 'SGL', 1),
  ('102', 'DBL', 1), ('201', 'DBL', 2), ('202', 'DBL', 2), ('203', 'DBL', 2),
  ('204', 'DBL', 2), ('301', 'SUITE', 3), ('302', 'SUITE', 3),
+ ('401', 'DBL', 4), ('402', 'DBL', 4),
 ]
 
 HOTEL_EXTRAS = [  # (code, name, price, revenue_account) — السياق = الكود
@@ -640,6 +643,33 @@ def seed_hotel(db: Session, tid: str, bid: str) -> dict:
                           room_type_id=rt_ids[tcode], hk_status='CLEAN'))
             added['rooms'] += 1
     db.flush()
+
+    # جناح مركب تجريبي (ADR-0035): «J-401» أب بيعي بنوع RSUITE، غرف الدور 4
+    # 401/402 أبناؤه — إدخال idempotent يصل القواعد القائمة بالترقية أيضاً.
+    rsu = rt_ids.get('RSUITE')
+    if rsu is not None:
+        suite = db.execute(
+            select(m.Room).where(m.Room.tenant_id == tid,
+                                 m.Room.branch_id == bid,
+                                 m.Room.room_no == 'J-401')
+        ).scalar_one_or_none()
+        if suite is None:
+            suite = m.Room(id=new_uuid(), tenant_id=tid, branch_id=bid,
+                           room_no='J-401', floor=4, room_type_id=rsu,
+                           hk_status='CLEAN', kind='SUITE_UNIT')
+            db.add(suite)
+            db.flush()
+            added['rooms'] += 1
+        for cn in ('401', '402'):
+            child = db.execute(
+                select(m.Room).where(m.Room.tenant_id == tid,
+                                     m.Room.branch_id == bid,
+                                     m.Room.room_no == cn)
+            ).scalar_one_or_none()
+            if child is not None and \
+                    getattr(child, 'parent_room_id', None) is None:
+                child.parent_room_id = suite.id
+        db.flush()
 
     # 3) الخدمات الإضافية
     for code, name, price, acct in HOTEL_EXTRAS:

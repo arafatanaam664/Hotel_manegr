@@ -267,7 +267,7 @@ def sync_heartbeat_now(db: Session = Depends(get_db),
 
 
 @router.get('/events')
-def sync_events(limit: int = Query(default=50, le=200),
+def sync_events(limit: int = Query(default=50, ge=1, le=200),
                 db: Session = Depends(get_db),
                 pr: Principal = Depends(require_perm('sync.view'))):
     rows = db.execute(select(m.SyncEventOut)
