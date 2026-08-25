@@ -121,5 +121,9 @@ def verify_backup(db: Session, tenant_id: str, backup_id: str) -> dict:
     db.commit()
     if not verified:
         _error('BACKUP.CHECKSUM_MISMATCH', 'فشل التحقق من بصمة النسخة', 409)
-    return {'id': rec.id, 'file_name': rec.file_name, 'sha256': rec.sha256,
-            'status': rec.status, 'verified': True}
+    return {
+        'id': rec.id, 'file_name': rec.file_name,
+        'storage_kind': rec.storage_kind, 'size_bytes': rec.size_bytes,
+        'sha256': rec.sha256, 'status': rec.status,
+        'created_at': rec.created_at.isoformat(), 'verified': True,
+    }

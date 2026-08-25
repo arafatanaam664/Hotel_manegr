@@ -42,6 +42,55 @@ def _ip(request: Request) -> str:
     return request.client.host if request.client else ''
 
 
+VENDOR_MODULES = {'ACCOUNTING', 'HOTEL', 'POS', 'INVENTORY', 'HR', 'ASSETS',
+                  'LAUNDRY', 'MAINTENANCE', 'BANQUETS'}
+
+
+def _normalize_product_profile(body: S.ProductProfileIn) -> tuple[list[str], dict]:
+    modules = {str(x).strip().upper() for x in body.modules if str(x).strip()}
+    modules.add('ACCOUNTING')
+    unknown = sorted(modules - VENDOR_MODULES)
+    if unknown:
+        vdeny('PRODUCT.UNKNOWN_MODULE',
+              f'وحدات غير معروفة: {", ".join(unknown)}', 400)
+    flags = {str(k).upper(): bool(v) for k, v in body.feature_flags.items()}
+    allowed_flags = {'MULTI_BRANCH', 'RESTAURANT', 'POINT_OF_SALE', 'LAUNDRY',
+                     'HOUSEKEEPING', 'MAINTENANCE', 'MULTI_CURRENCY',
+                     'OFFLINE_POS', 'POLICE_REPORT'}
+    unknown_flags = sorted(set(flags) - allowed_flags)
+    if unknown_flags:
+        vdeny('PRODUCT.UNKNOWN_FEATURE',
+              f'خصائص غير معروفة: {", ".join(unknown_flags)}', 400)
+    flags.setdefault('MULTI_BRANCH', False)
+    flags['RESTAURANT'] = flags.get('RESTAURANT', False) and 'POS' in modules
+    flags['POINT_OF_SALE'] = flags.get('POINT_OF_SALE', False) and 'POS' in modules
+    flags['OFFLINE_POS'] = flags.get('OFFLINE_POS', False) and flags['POINT_OF_SALE']
+    flags['LAUNDRY'] = flags.get('LAUNDRY', False) and 'LAUNDRY' in modules
+    flags['MAINTENANCE'] = flags.get('MAINTENANCE', False) and 'MAINTENANCE' in modules
+    flags['HOUSEKEEPING'] = flags.get('HOUSEKEEPING', False) and 'HOTEL' in modules
+    return sorted(modules), flags
+
+
+def _ensure_vendor_columns(eng) -> None:
+    """ترقية قواعد vendor القديمة بإضافة أعمدة ملف المنتج فقط."""
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    if 'vendor_clients' not in insp.get_table_names():
+        return
+    cols = {c['name'] for c in insp.get_columns('vendor_clients')}
+    alters = []
+    if 'property_type' not in cols:
+        alters.append("ALTER TABLE vendor_clients ADD COLUMN property_type VARCHAR(30) NOT NULL DEFAULT 'HOTEL'")
+    if 'feature_flags' not in cols:
+        alters.append("ALTER TABLE vendor_clients ADD COLUMN feature_flags TEXT NOT NULL DEFAULT '{}'")
+    if 'product_revision' not in cols:
+        alters.append('ALTER TABLE vendor_clients ADD COLUMN product_revision INTEGER NOT NULL DEFAULT 1')
+    if alters:
+        with eng.begin() as conn:
+            for ddl in alters:
+                conn.execute(text(ddl))
+
+
 def create_vendor_app() -> FastAPI:
     s = get_vendor_settings()
     app = FastAPI(title=s.app_name, version=s.version,
@@ -151,7 +200,10 @@ def create_vendor_app() -> FastAPI:
                 'branches_count': c.branches_count,
                 'sales_channel': c.sales_channel,
                 'contract_ref': c.contract_ref, 'package': c.package,
-                'modules': c.modules, 'plan_code': c.plan_code,
+                'modules': c.modules, 'property_type': c.property_type,
+                'feature_flags': c.feature_flags,
+                'product_revision': c.product_revision,
+                'plan_code': c.plan_code,
                 'billing_period': c.billing_period,
                 'monthly_value': str(c.monthly_value),
                 'activation_date': str(c.activation_date or ''),
@@ -188,6 +240,32 @@ def create_vendor_app() -> FastAPI:
     def get_client(code: str, db: Session = Depends(get_vdb),
                    pr: VPrincipal = Depends(require_perm('clients.view'))):
         return _client_out(db, _client_or_404(db, code))
+
+    @app.patch('/api/v1/clients/{code}/product-profile')
+    def patch_product_profile(code: str, body: S.ProductProfileIn,
+                              request: Request,
+                              db: Session = Depends(get_vdb),
+                              pr: VPrincipal = Depends(require_perm('clients.manage'))):
+        c = _client_or_404(db, code)
+        modules, flags = _normalize_product_profile(body)
+        before = {'property_type': c.property_type, 'modules': c.modules,
+                   'feature_flags': c.feature_flags,
+                   'product_revision': c.product_revision}
+        c.property_type = body.property_type
+        c.modules = modules
+        c.feature_flags = flags
+        c.product_revision = (c.product_revision or 0) + 1
+        vaudit(db, actor_id=pr.id, module='product', action='PRODUCT_PROFILE_UPDATE',
+               entity='vendor_clients', entity_id=c.id, before=before,
+               after={'property_type': c.property_type, 'modules': c.modules,
+                      'feature_flags': c.feature_flags,
+                      'product_revision': c.product_revision}, ip=_ip(request))
+        db.commit()
+        out = _client_out(db, c)
+        # ملف المنتج لا يصبح سارياً في الموقع إلا بعد إصدار حمولة موقعة؛
+        # لذلك حتى العميل الجديد يحتاج خطوة إصدار/تسليم أول ترخيص.
+        out['license_refresh_required'] = True
+        return out
 
     @app.post('/api/v1/clients/{code}/status')
     def set_status(code: str, body: S.ClientStatusIn, request: Request,
@@ -339,13 +417,14 @@ def create_vendor_app() -> FastAPI:
                       pr: VPrincipal = Depends(require_perm('licenses.issue'))):
         c = _client_or_404(db, body.client_code)
         rec = LS.issue_license(db, c, actor=pr.user, kind=body.kind,
-                               modules=body.modules,
+                               modules=body.modules or c.modules,
                                max_users=body.max_users,
                                max_branches=body.max_branches,
                                expires=body.expires, days=body.days,
                                grace_days=body.grace_days,
                                fingerprint=body.fingerprint,
-                               features=body.features,
+                               features=body.features if body.features is not None
+                               else c.feature_flags,
                                support=body.support, ip=_ip(request))
         db.commit()
         return {'id': rec.id, 'license_id': rec.license_id,
@@ -653,6 +732,7 @@ def create_vendor_app() -> FastAPI:
     @app.on_event('startup')
     def _startup():
         VendorBase.metadata.create_all(engine)
+        _ensure_vendor_columns(engine)
         if s.seed_on_startup:
             db = SessionVendor()
             try:

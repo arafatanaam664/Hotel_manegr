@@ -38,7 +38,4 @@ def post_verify(
         db: Session = Depends(get_db),
         pr: Principal = Depends(require_perm('settings.manage'))):
     result = verify_backup(db, pr.tenant_id, backup_id)
-    result['created_at'] = ''
-    result['storage_kind'] = 'LOCAL'
-    result['size_bytes'] = 0
     return BackupOut(**result)

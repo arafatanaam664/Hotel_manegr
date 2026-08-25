@@ -27,6 +27,8 @@ class ClientIn(BaseModel):
     contract_ref: str = ''
     package: str = Field(default='LOCAL', pattern='^(LOCAL|CLOUD|HYBRID)$')
     modules: list[str] = Field(default_factory=lambda: ['ACCOUNTING'])
+    property_type: str = Field(default='HOTEL', pattern='^(HOTEL|INN|SERVICED_APARTMENTS|RESORT|OTHER)$')
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
     plan_code: str = ''
     billing_period: str = Field(default='YEARLY',
                                 pattern='^(MONTHLY|YEARLY)$')
@@ -142,3 +144,10 @@ class ReleaseIn(BaseModel):
     version: str = Field(min_length=3, max_length=20)
     ring: str = Field(default='CANARY', pattern='^(CANARY|GENERAL)$')
     notes: str = ''
+
+
+class ProductProfileIn(BaseModel):
+    """الملف التشغيلي الذي تقرره الشركة قبل إصدار/تجديد الترخيص."""
+    property_type: str = Field(default='HOTEL', pattern='^(HOTEL|INN|SERVICED_APARTMENTS|RESORT|OTHER)$')
+    modules: list[str] = Field(default_factory=lambda: ['ACCOUNTING'])
+    feature_flags: dict[str, bool] = Field(default_factory=dict)

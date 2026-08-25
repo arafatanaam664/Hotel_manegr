@@ -550,3 +550,28 @@ def test_vendor_audit_chained(vclient):
     rows = vclient.get('/api/v1/audit', headers=hdr).json()
     assert rows and all(len(r['row_hash']) == 16 for r in rows)
     assert any(r['action'] == 'CLIENT_CREATE' for r in rows)
+
+
+# ═══ ملف المنتج المركزي ═══
+def test_vendor_product_profile_is_audited_and_requires_license_refresh(vclient):
+    hdr = _enroll_and_login(vclient, 'sales1')
+    r = vclient.patch('/api/v1/clients/CLI-001/product-profile', headers=hdr,
+                      json={'property_type': 'RESORT',
+                            'modules': ['ACCOUNTING', 'HOTEL', 'POS'],
+                            'feature_flags': {'RESTAURANT': True,
+                                              'POINT_OF_SALE': True,
+                                              'MULTI_BRANCH': False}})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body['property_type'] == 'RESORT'
+    assert body['modules'] == ['ACCOUNTING', 'HOTEL', 'POS']
+    assert body['product_revision'] >= 2
+    assert body['license_refresh_required'] is True
+
+
+def test_vendor_product_profile_rejects_unknown_module(vclient):
+    hdr = _enroll_and_login(vclient, 'sales1')
+    r = vclient.patch('/api/v1/clients/CLI-001/product-profile', headers=hdr,
+                      json={'modules': ['ACCOUNTING', 'UNKNOWN_MODULE']})
+    assert r.status_code == 400
+    assert r.json()['error']['code'] == 'PRODUCT.UNKNOWN_MODULE'

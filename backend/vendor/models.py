@@ -58,6 +58,9 @@ class Client(VendorBase):
     contract_ref: Mapped[str] = mapped_column(String(120), default='')
     package: Mapped[str] = mapped_column(String(10), default='LOCAL')
     modules: Mapped[list] = mapped_column(JSONType, default=list)
+    property_type: Mapped[str] = mapped_column(String(30), default='HOTEL')
+    feature_flags: Mapped[dict] = mapped_column(JSONType, default=dict)
+    product_revision: Mapped[int] = mapped_column(Integer, default=1)
     plan_code: Mapped[str] = mapped_column(String(40), default='')
     billing_period: Mapped[str] = mapped_column(String(10), default='YEARLY')
     monthly_value: Mapped[Decimal] = mapped_column(Numeric(19, 4),
