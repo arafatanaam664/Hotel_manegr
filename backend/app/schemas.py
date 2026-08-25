@@ -333,3 +333,46 @@ class LicenseStatusOut(BaseModel):
     last_check: str | None = None
     revocation_serial: int
     site_id: str
+
+
+# ─── التهيئة التجارية والتشغيلية ─────────────────────────
+class ProductConfigIn(BaseModel):
+    deployment_mode: str = Field(default='LOCAL', pattern='^(LOCAL|CLOUD|HYBRID)$')
+    property_type: str = Field(default='HOTEL', pattern='^(HOTEL|INN|SERVICED_APARTMENTS|RESORT|OTHER)$')
+    modules_enabled: list[str] = Field(default_factory=lambda: ['ACCOUNTING'])
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
+    multi_branch: bool = False
+    complete: bool = False
+
+
+class ProductConfigOut(BaseModel):
+    tenant_id: str
+    deployment_mode: str
+    property_type: str
+    setup_state: str
+    modules_enabled: list[str]
+    feature_flags: dict[str, bool]
+    configured_by: str | None = None
+    completed_at: str | None = None
+    version: int
+    updated_at: str | None = None
+
+
+class ProductCatalogOut(BaseModel):
+    modules: dict[str, dict]
+    features: dict[str, str]
+    dependencies: dict[str, list[str]]
+    deployment_modes: list[str]
+    property_types: list[str]
+
+
+# ─── النسخ الاحتياطي ─────────────────────────────────────
+class BackupOut(BaseModel):
+    id: str
+    file_name: str
+    storage_kind: str
+    size_bytes: int
+    sha256: str
+    status: str
+    created_at: str
+    verified: bool | None = None

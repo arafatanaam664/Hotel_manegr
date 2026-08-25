@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Bootstrap
     seed_on_startup: bool = True
+    bootstrap_profile: str = 'DEMO'       # DEMO للعرض أو COMMERCIAL للتثبيت
     admin_username: str = 'admin'
     admin_password: str = 'admin123!Change'   # محلي فقط — cloud يتطلب تجاوزها
     demo_tenant_name: str = 'فندق النموذج التجريبي'
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     vendor_edge_url: str = ''              # لوحة الشركة لسحب ترخيص/نبض
     vendor_edge_token: str = ''
     vendor_client_code: str = ''
+
+    # النسخ والاستعادة — محلياً افتراضياً، والتخزين الخارجي يضاف عبر موفر
+    backup_dir: str = './backups'
+    backup_retention_days: int = 90
 
 
 @lru_cache

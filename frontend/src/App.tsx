@@ -36,6 +36,8 @@ import LicenseStatus from './pages/LicenseStatus'
 import SyncCenter from './pages/SyncCenter'
 import UsersPage from './pages/Users'
 import Police from './pages/Police'
+import ProductSetup from './pages/ProductSetup'
+import Backups from './pages/Backups'
 
 export default function App() {
   const { session } = useAuth()
@@ -76,6 +78,8 @@ export default function App() {
           <Route path="license" element={<LicenseStatus />} />
           <Route path="sync" element={<SyncCenter />} />
           <Route path="users" element={<UsersPage />} />
+        <Route path="setup" element={<ProductSetup />} />
+        <Route path="backups" element={<Backups />} />
           <Route path="police" element={<Police />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />

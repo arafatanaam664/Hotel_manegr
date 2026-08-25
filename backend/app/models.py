@@ -34,6 +34,28 @@ class Tenant(Base):
     office_label: Mapped[str] = mapped_column(String(40), default='')
 
 
+class TenantProductConfig(Base):
+    """تهيئة المنتج التجارية والتشغيلية للمستأجر.
+
+    لا تمنح هذه التهيئة استحقاقاً تجارياً من تلقاء نفسها؛ الترخيص الموقع
+    يحدد ما تم شراؤه، بينما تحدد هذه السجلات ما اختاره العميل وشغله فعلياً.
+    """
+    __tablename__ = 'tenant_product_configs'
+    tenant_id: Mapped[str] = mapped_column(ForeignKey('tenants.id'),
+                                            primary_key=True)
+    deployment_mode: Mapped[str] = mapped_column(String(10), default='LOCAL')
+    property_type: Mapped[str] = mapped_column(String(30), default='HOTEL')
+    setup_state: Mapped[str] = mapped_column(String(20), default='NOT_STARTED')
+    modules_enabled: Mapped[list] = mapped_column(JSONType, default=list)
+    feature_flags: Mapped[dict] = mapped_column(JSONType, default=dict)
+    configured_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class Branch(Base):
     __tablename__ = 'branches'
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -152,6 +174,24 @@ class AuditLog(Base):
     business_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     prev_hash: Mapped[str] = mapped_column(String(64))
     row_hash: Mapped[str] = mapped_column(String(64))
+
+
+class BackupRecord(Base):
+    """سجل النسخ الاحتياطية القابلة للتحقق والاستعادة."""
+    __tablename__ = 'backup_records'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey('tenants.id'), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    file_name: Mapped[str] = mapped_column(String(240))
+    file_path: Mapped[str] = mapped_column(String(600))
+    storage_kind: Mapped[str] = mapped_column(String(20), default='LOCAL')
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    sha256: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default='VERIFIED')
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    error: Mapped[str] = mapped_column(Text, default='')
 
 
 class Currency(Base):

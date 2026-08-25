@@ -502,7 +502,7 @@ INV_SUPPLIER_PRICES = [
 
 
 def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
-                  admin_password: str) -> dict:
+                  admin_password: str, bootstrap_profile: str = 'DEMO') -> dict:
     if db.execute(select(m.Tenant.id)).first():
         return {'seeded': False}
 
@@ -564,11 +564,35 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
                             description=desc, template=tpl,
                             effective_from=date(2020, 1, 1),
                             effective_to=None))
-    seed_hotel(db, tid, bid)
-    seed_pos(db, tid, bid)
-    seed_inv(db, tid, bid)
-    seed_hr(db, tid, bid)
-    seed_fa(db, tid, bid)
+    profile = (bootstrap_profile or 'DEMO').upper()
+    if profile not in {'DEMO', 'COMMERCIAL'}:
+        raise ValueError('bootstrap_profile must be DEMO or COMMERCIAL')
+
+    # العرض يزرع بيانات نموذجية كاملة، أما التثبيت التجاري فينشئ نواة نظيفة
+    # ويترك اختيار الوحدات والبيانات الواقعية لمعالج /api/setup/product.
+    if profile == 'DEMO':
+        seed_hotel(db, tid, bid)
+        seed_pos(db, tid, bid)
+        seed_inv(db, tid, bid)
+        seed_hr(db, tid, bid)
+        seed_fa(db, tid, bid)
+
+    db.add(m.TenantProductConfig(
+        tenant_id=tid,
+        deployment_mode='LOCAL',
+        property_type='HOTEL',
+        setup_state='NOT_STARTED' if profile == 'COMMERCIAL' else 'COMPLETED',
+        modules_enabled=['ACCOUNTING'] if profile == 'COMMERCIAL' else [
+            'ACCOUNTING', 'HOTEL', 'POS', 'INVENTORY', 'HR'],
+        feature_flags={
+            'MULTI_BRANCH': False, 'RESTAURANT': profile == 'DEMO',
+            'POINT_OF_SALE': profile == 'DEMO', 'LAUNDRY': False,
+            'HOUSEKEEPING': profile == 'DEMO', 'MAINTENANCE': False,
+            'MULTI_CURRENCY': True, 'OFFLINE_POS': profile == 'DEMO',
+            'POLICE_REPORT': profile == 'DEMO'},
+        configured_by=None,
+        completed_at=utcnow() if profile == 'DEMO' else None,
+        created_at=utcnow(), updated_at=utcnow()))
 
     # أدوار ومستخدم مدير
     role_ids = {}

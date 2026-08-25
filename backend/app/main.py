@@ -140,10 +140,13 @@ def create_app() -> FastAPI:
     from fastapi import Depends as _Depends
     from . import licensing as _lic
     from .api import (accounting, auth, health, hotel, inventory, license,
-                      org, police, pos, reports, hr, assets, sync)
+                      org, police, pos, reports, hr, assets, sync, provisioning,
+                      backups)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(org.router)
+    app.include_router(provisioning.router)
+    app.include_router(backups.router)
     app.include_router(license.router)
     app.include_router(accounting.router)
     app.include_router(reports.router)
@@ -173,9 +176,11 @@ def create_app() -> FastAPI:
             db = SessionLocal()
             try:
                 from .seed import ensure_hotel_upgrade, seed_if_empty
-                out = seed_if_empty(db, tenant_name=s.demo_tenant_name,
-                                    admin_username=s.admin_username,
-                                    admin_password=s.admin_password)
+                out = seed_if_empty(
+                    db, tenant_name=s.demo_tenant_name,
+                    admin_username=s.admin_username,
+                    admin_password=s.admin_password,
+                    bootstrap_profile=s.bootstrap_profile)
                 if not out['seeded']:
                     # قاعدة قائمة ← ترقية بدون فقدان (خرائط/غرف/أدوار الفندق)
                     ensure_hotel_upgrade(db)

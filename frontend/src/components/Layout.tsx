@@ -38,6 +38,8 @@ const NAV = [
   { to: '/audit', label: 'سجل التدقيق', icon: '🛡', perm: 'audit.view' },
   { to: '/sync', label: 'مركز المزامنة', icon: '🔄', perm: 'sync.view' },
   { to: '/users', label: 'المستخدمون والصلاحيات', icon: '👥', perm: 'users.manage' },
+  { to: '/setup', label: 'إعداد المنتج والتثبيت', icon: '⚙', perm: 'settings.manage' },
+  { to: '/backups', label: 'النسخ الاحتياطي', icon: '💾', perm: 'settings.manage' },
   { to: '/license', label: 'حالة الترخيص', icon: '🔑' },
 ]
 
