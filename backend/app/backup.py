@@ -10,7 +10,8 @@ import hashlib
 import os
 import shutil
 import sqlite3
-from datetime import datetime, timezone
+import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -55,27 +56,41 @@ def _safe_backup_dir() -> Path:
 
 
 def create_backup(db: Session, tenant_id: str, actor_id: str | None = None) -> dict:
-    source = _sqlite_path(get_settings().database_url)
-    if not source.exists():
-        _error('BACKUP.SOURCE_MISSING', 'ملف قاعدة البيانات غير موجود', 500)
+    database_url = get_settings().database_url
     target_dir = _safe_backup_dir()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    target = target_dir / f'backup_{tenant_id[:8]}_{stamp}.sqlite3'
+    is_postgres = database_url.startswith(('postgresql://', 'postgres://'))
+    suffix = '.dump' if is_postgres else '.sqlite3'
+    target = target_dir / f'backup_{tenant_id[:8]}_{stamp}{suffix}'
     tmp = target.with_suffix('.tmp')
     try:
-        src = sqlite3.connect(str(source))
-        dst = sqlite3.connect(str(tmp))
-        with dst:
-            src.backup(dst)
-        dst.close()
-        src.close()
+        if is_postgres:
+            if not shutil.which('pg_dump'):
+                _error('BACKUP.PGDUMP_MISSING',
+                       'pg_dump غير مثبت على خادم السحابة', 501)
+            subprocess.run([
+                'pg_dump', '--format=custom', '--no-owner', '--no-acl',
+                '--file', str(tmp), '--dbname', database_url,
+            ], check=True, timeout=900, capture_output=True, text=True)
+            storage_kind = 'POSTGRES_CUSTOM'
+        else:
+            source = _sqlite_path(database_url)
+            if not source.exists():
+                _error('BACKUP.SOURCE_MISSING', 'ملف قاعدة البيانات غير موجود', 500)
+            src = sqlite3.connect(str(source))
+            dst = sqlite3.connect(str(tmp))
+            with dst:
+                src.backup(dst)
+            dst.close()
+            src.close()
+            storage_kind = 'LOCAL'
         os.replace(tmp, target)
         digest = _sha256(target)
         now = utcnow()
         rec = m.BackupRecord(
             id=new_uuid(), tenant_id=tenant_id, created_at=now,
             file_name=target.name, file_path=str(target),
-            storage_kind='LOCAL', size_bytes=target.stat().st_size,
+            storage_kind=storage_kind, size_bytes=target.stat().st_size,
             sha256=digest, status='VERIFIED', verified_at=now,
             created_by=actor_id, error='')
         db.add(rec)
@@ -86,6 +101,8 @@ def create_backup(db: Session, tenant_id: str, actor_id: str | None = None) -> d
             'sha256': rec.sha256, 'status': rec.status,
             'created_at': rec.created_at.isoformat(),
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
@@ -108,6 +125,23 @@ def list_backups(db: Session, tenant_id: str, limit: int = 50) -> list[dict]:
             'verified': exists and _sha256(path) == rec.sha256,
         })
     return out
+
+
+def prune_backups(db: Session, tenant_id: str) -> int:
+    """يطبق سياسة الاحتفاظ دون حذف سجل التدقيق؛ الملف فقط يُزال ويُعلّم السجل."""
+    cutoff = utcnow() - timedelta(days=max(1, get_settings().backup_retention_days))
+    rows = db.query(m.BackupRecord).filter(
+        m.BackupRecord.tenant_id == tenant_id,
+        m.BackupRecord.created_at < cutoff,
+        m.BackupRecord.status != 'EXPIRED').all()
+    removed = 0
+    for rec in rows:
+        Path(rec.file_path).unlink(missing_ok=True)
+        rec.status = 'EXPIRED'
+        removed += 1
+    if removed:
+        db.flush()
+    return removed
 
 
 def verify_backup(db: Session, tenant_id: str, backup_id: str) -> dict:
