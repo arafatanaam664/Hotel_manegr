@@ -583,7 +583,7 @@ def seed_if_empty(db: Session, *, tenant_name: str, admin_username: str,
         property_type='HOTEL',
         setup_state='NOT_STARTED' if profile == 'COMMERCIAL' else 'COMPLETED',
         modules_enabled=['ACCOUNTING'] if profile == 'COMMERCIAL' else [
-            'ACCOUNTING', 'HOTEL', 'POS', 'INVENTORY', 'HR'],
+            'ACCOUNTING', 'HOTEL', 'POS', 'INVENTORY', 'HR', 'ASSETS'],
         feature_flags={
             'MULTI_BRANCH': False, 'RESTAURANT': profile == 'DEMO',
             'POINT_OF_SALE': profile == 'DEMO', 'LAUNDRY': False,

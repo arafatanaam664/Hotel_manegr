@@ -599,6 +599,16 @@ def require_module(module: str):
                                 f'وحدة «{MODULES_AR.get(module, module)}» غير '
                                 f'مفعَّلة في باقتك — رقِّ اشتراكك من الشركة.',
                                 'module': module}})
+        # الترخيص يحدد ما تم شراؤه، وتهيئة المنتج تحدد ما اختاره العميل
+        # تشغيله. لا يكفي أحدهما منفرداً لفتح وحدة في المنتج.
+        cfg = db.get(m.TenantProductConfig, pr.tenant_id)
+        if cfg is not None and module not in (cfg.modules_enabled or []):
+            raise HTTPException(
+                403, {'error': {'code': 'SETUP.MODULE_DISABLED',
+                                'message_ar':
+                                f'وحدة «{MODULES_AR.get(module, module)}» معطّلة '
+                                'في تهيئة هذا الموقع — فعّلها من إعداد المنتج.',
+                                'module': module}})
         return pr
     return _guard
 

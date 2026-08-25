@@ -67,3 +67,18 @@ def test_product_config_is_persisted(db_session):
     cfg = db.get(m.TenantProductConfig, seed['tenant_id'])
     assert cfg is not None
     assert 'ACCOUNTING' in cfg.modules_enabled
+
+
+def test_disabled_module_is_enforced_at_route_boundary(client, auth_hdr):
+    r = client.put('/api/setup/product', headers=auth_hdr, json={
+        'deployment_mode': 'LOCAL',
+        'property_type': 'HOTEL',
+        'modules_enabled': ['ACCOUNTING', 'HOTEL'],
+        'feature_flags': {},
+        'multi_branch': False,
+        'complete': True,
+    })
+    assert r.status_code == 200, r.text
+    r = client.get('/api/pos/outlets', headers=auth_hdr)
+    assert r.status_code == 403, r.text
+    assert r.json()['error']['code'] == 'SETUP.MODULE_DISABLED'
