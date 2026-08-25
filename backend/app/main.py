@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .config import get_settings
+from .config import get_settings, validate_runtime_settings
 from .db import Base, SessionLocal, engine
 from .posting import PostingError
 
@@ -97,11 +97,14 @@ def _ensure_additive_columns(eng) -> None:
 
 def create_app() -> FastAPI:
     s = get_settings()
+    validate_runtime_settings(s)
     app = FastAPI(title=s.app_name, version=s.version,
                   docs_url='/api/docs', openapi_url='/api/openapi.json')
 
+    origins = [x.strip() for x in s.cors_allowed_origins.split(',')
+               if x.strip()]
     app.add_middleware(
-        CORSMiddleware, allow_origins=['*'], allow_credentials=False,
+        CORSMiddleware, allow_origins=origins, allow_credentials=False,
         allow_methods=['*'], allow_headers=['*'])
 
     # ── مغلّف الأخطاء الموحد ─────────────────────────────

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     app_name: str = 'Sijill Al-Nuzul Hotel ERP'
     version: str = '0.14.0'
+    environment: str = 'development'       # development | staging | production
     deployment_mode: str = 'local'            # local | cloud | hybrid
 
     # قاعدة البيانات: افتراضي SQLite ملف بجوار المشروع، والإنتاج PostgreSQL
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     vendor_edge_url: str = ''              # لوحة الشركة لسحب ترخيص/نبض
     vendor_edge_token: str = ''
     vendor_client_code: str = ''
+    cors_allowed_origins: str = '*'        # مفصول بفواصل؛ يمنع * في الإنتاج
 
     # النسخ والاستعادة — محلياً افتراضياً، والتخزين الخارجي يضاف عبر موفر
     backup_dir: str = './backups'
@@ -55,3 +57,21 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def validate_runtime_settings(s: Settings) -> None:
+    """يرفض الإقلاع الإنتاجي بقيم التطوير الخطرة بدلاً من اكتشافها بعد البيع."""
+    if s.environment.lower() not in {'development', 'staging', 'production'}:
+        raise RuntimeError('ENVIRONMENT must be development, staging, or production')
+    if s.environment.lower() != 'production':
+        return
+    if len(s.jwt_secret) < 32 or s.jwt_secret == 'dev-only-insecure-secret-change-me':
+        raise RuntimeError('JWT_SECRET must be a unique secret of at least 32 characters')
+    if s.bootstrap_profile.upper() != 'COMMERCIAL':
+        raise RuntimeError('BOOTSTRAP_PROFILE=COMMERCIAL is required in production')
+    if s.admin_password == 'admin123!Change' or len(s.admin_password) < 12:
+        raise RuntimeError('ADMIN_PASSWORD must be replaced in production')
+    if s.cors_allowed_origins.strip() == '*':
+        raise RuntimeError('CORS_ALLOWED_ORIGINS cannot be * in production')
+    if s.deployment_mode.lower() in {'cloud', 'hybrid'} and not s.database_url:
+        raise RuntimeError('DATABASE_URL is required for cloud or hybrid production')
