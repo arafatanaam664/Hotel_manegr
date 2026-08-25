@@ -558,3 +558,128 @@ def _party_names(db: Session, tenant_id: str) -> dict[str, str]:
             m.HrEmployee.tenant_id == tenant_id)).scalars():
         out[f'EMPLOYEE:{e.id}'] = f'{e.emp_no} — {e.full_name}'
     return out
+
+
+# ─── حزمة التقارير التشغيلية الفندقية ───────────────────────────────
+def hotel_daily_report(db: Session, tenant_id: str, business_day: date,
+                       branch_id: str | None = None) -> dict:
+    """لقطة تشغيلية يومية من مصادر الحجز والإقامة والغرف.
+
+    لا تعتمد على أرصدة دفتر الأستاذ؛ الإيراد هنا يُقاس من Snapshot الليالي،
+    بينما يبقى الأستاذ المصدر المالي النهائي. هذا الفصل يمنع خلط occupancy
+    مع الرصيد المحاسبي ويتيح مطابقة التقرير مع التدقيق الليلي.
+    """
+    room_q = select(m.Room).where(m.Room.tenant_id == tenant_id,
+                                  m.Room.is_active.is_(True))
+    if branch_id:
+        room_q = room_q.where(m.Room.branch_id == branch_id)
+    rooms = db.execute(room_q).scalars().all()
+    unavailable = {'OOO', 'OOS'}
+    sellable = [r for r in rooms if r.hk_status not in unavailable]
+
+    res_q = select(m.Reservation).where(
+        m.Reservation.tenant_id == tenant_id,
+        m.Reservation.status.notin_(['CANCELLED', 'NO_SHOW']))
+    if branch_id:
+        res_q = res_q.where(m.Reservation.branch_id == branch_id)
+    reservations = db.execute(res_q).scalars().all()
+
+    arrivals = [r for r in reservations
+                if r.arrival_date == business_day and r.status in
+                ('TENTATIVE', 'CONFIRMED', 'CHECKED_IN')]
+    departures = [r for r in reservations
+                  if r.departure_date == business_day and r.status in
+                  ('CHECKED_IN', 'CHECKED_OUT')]
+    no_shows = [r for r in db.execute(select(m.Reservation).where(
+        m.Reservation.tenant_id == tenant_id,
+        m.Reservation.arrival_date == business_day,
+        m.Reservation.status == 'NO_SHOW')).scalars().all()]
+
+    stay_q = select(m.ReservationStay, m.Reservation).join(
+        m.Reservation, m.Reservation.id == m.ReservationStay.reservation_id).where(
+            m.ReservationStay.tenant_id == tenant_id,
+            m.ReservationStay.from_date <= business_day,
+            m.ReservationStay.to_date > business_day,
+            m.Reservation.status.notin_(['CANCELLED', 'NO_SHOW']))
+    if branch_id:
+        stay_q = stay_q.where(m.Reservation.branch_id == branch_id)
+    stays = db.execute(stay_q).all()
+    sold_room_ids = {stay.room_id for stay, _ in stays if stay.room_id}
+
+    rate_q = select(m.ReservationNightRate, m.Reservation).join(
+        m.Reservation, m.Reservation.id == m.ReservationNightRate.reservation_id).where(
+            m.ReservationNightRate.tenant_id == tenant_id,
+            m.ReservationNightRate.stay_date == business_day,
+            m.Reservation.status.notin_(['CANCELLED', 'NO_SHOW']))
+    if branch_id:
+        rate_q = rate_q.where(m.Reservation.branch_id == branch_id)
+    nightly = db.execute(rate_q).all()
+    room_revenue = sum((D(rate.rate) for rate, _ in nightly), Decimal('0'))
+    rooms_sold = len(sold_room_ids) or len({rate.room_id for rate, _ in nightly if rate.room_id})
+    sold_room_ids |= {rate.room_id for rate, _ in nightly if rate.room_id}
+    adr = (room_revenue / rooms_sold) if rooms_sold else Decimal('0')
+    revpar = (room_revenue / len(sellable)) if sellable else Decimal('0')
+    occupancy = (Decimal(rooms_sold) / Decimal(len(sellable)) * Decimal('100')) \
+        if sellable else Decimal('0')
+
+    by_source: dict[str, Decimal] = {}
+    for rate, reservation in nightly:
+        source = reservation.source or 'DIRECT'
+        by_source[source] = by_source.get(source, Decimal('0')) + D(rate.rate)
+    hk = {}
+    for room in rooms:
+        hk[room.hk_status] = hk.get(room.hk_status, 0) + 1
+
+    def q4(value: Decimal) -> Decimal:
+        return value.quantize(Decimal('0.0001'))
+
+    return {
+        'business_day': business_day,
+        'rooms_total': len(rooms),
+        'rooms_sellable': len(sellable),
+        'rooms_sold': rooms_sold,
+        'rooms_out_of_service': len(rooms) - len(sellable),
+        'occupancy_pct': q4(occupancy),
+        'room_revenue': q4(room_revenue),
+        'adr': q4(adr),
+        'revpar': q4(revpar),
+        'arrivals': len(arrivals),
+        'departures': len(departures),
+        'in_house': len(sold_room_ids),
+        'no_shows': len(no_shows),
+        'housekeeping': hk,
+        'revenue_by_source': {k: q4(v) for k, v in sorted(by_source.items())},
+    }
+
+
+def hotel_daily_range(db: Session, tenant_id: str, date_from: date,
+                      date_to: date, branch_id: str | None = None) -> dict:
+    if date_to < date_from:
+        raise PostingError('REPORTS.INVALID_RANGE', 'نهاية الفترة قبل بدايتها')
+    if (date_to - date_from).days > 366:
+        raise PostingError('REPORTS.RANGE_TOO_LONG', 'الفترة القصوى للتقرير 366 يوماً')
+    rows = []
+    cur = date_from
+    while cur <= date_to:
+        rows.append(hotel_daily_report(db, tenant_id, cur, branch_id))
+        cur += __import__('datetime').timedelta(days=1)
+    total_sellable = sum(x['rooms_sellable'] for x in rows)
+    total_sold = sum(x['rooms_sold'] for x in rows)
+    total_revenue = sum((x['room_revenue'] for x in rows), Decimal('0'))
+    adr = total_revenue / total_sold if total_sold else Decimal('0')
+    revpar = total_revenue / total_sellable if total_sellable else Decimal('0')
+    occupancy = Decimal(total_sold) / Decimal(total_sellable) * Decimal('100') \
+        if total_sellable else Decimal('0')
+    return {
+        'from_date': date_from, 'to_date': date_to, 'rows': rows,
+        'totals': {
+            'rooms_sold': total_sold,
+            'room_revenue': total_revenue.quantize(Decimal('0.0001')),
+            'adr': adr.quantize(Decimal('0.0001')),
+            'revpar': revpar.quantize(Decimal('0.0001')),
+            'occupancy_pct': occupancy.quantize(Decimal('0.0001')),
+            'arrivals': sum(x['arrivals'] for x in rows),
+            'departures': sum(x['departures'] for x in rows),
+            'no_shows': sum(x['no_shows'] for x in rows),
+        },
+    }

@@ -376,3 +376,40 @@ class BackupOut(BaseModel):
     status: str
     created_at: str
     verified: bool | None = None
+
+
+# ─── التقارير التشغيلية الفندقية ─────────────────────────
+class HotelDailyReportOut(BaseModel):
+    business_day: date
+    rooms_total: int
+    rooms_sellable: int
+    rooms_sold: int
+    rooms_out_of_service: int
+    occupancy_pct: Decimal
+    room_revenue: Decimal
+    adr: Decimal
+    revpar: Decimal
+    arrivals: int
+    departures: int
+    in_house: int
+    no_shows: int
+    housekeeping: dict[str, int]
+    revenue_by_source: dict[str, Decimal]
+
+
+class HotelRangeTotalsOut(BaseModel):
+    rooms_sold: int
+    room_revenue: Decimal
+    adr: Decimal
+    revpar: Decimal
+    occupancy_pct: Decimal
+    arrivals: int
+    departures: int
+    no_shows: int
+
+
+class HotelRangeReportOut(BaseModel):
+    from_date: date
+    to_date: date
+    rows: list[HotelDailyReportOut]
+    totals: HotelRangeTotalsOut

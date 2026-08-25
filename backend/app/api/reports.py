@@ -2,7 +2,7 @@
 ميزان المراجعة • دفتر الأستاذ • سيناريو الشهر الفندقي التجريبي (بوابة G1)."""
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,21 @@ from ..reports import ledger, run_g1_month_scenario, trial_balance
 from ..schemas import LedgerOut, TrialBalanceOut
 
 router = APIRouter(prefix='/api', tags=['reports'])
+
+
+def _scoped_branch(pr: Principal, branch_id: str | None) -> str | None:
+    """حماية التقارير الجديدة من تسريب بيانات فرع غير مسند للمستخدم."""
+    if '*' in pr.perms:
+        return branch_id
+    if branch_id and branch_id not in pr.branch_ids:
+        raise HTTPException(403, {'error': {
+            'code': 'RBAC.BRANCH_FORBIDDEN',
+            'message_ar': 'لا تملك صلاحية عرض هذا الفرع'}})
+    if branch_id:
+        return branch_id
+    if len(pr.branch_ids) == 1:
+        return pr.branch_ids[0]
+    return None
 
 
 @router.get('/reports/trial-balance', response_model=TrialBalanceOut)
@@ -54,6 +69,7 @@ def run_demo_month(year: int | None = None, month: int | None = None,
 
 # ─── القوائم المالية الكاملة (02 §10) ──────────────────
 from ..schemas import (AgingOut, BalanceSheetOut, CashFlowOut,  # noqa: E402
+                       HotelDailyReportOut, HotelRangeReportOut,
                        IncomeStatementOut)
 
 
@@ -90,3 +106,21 @@ def get_aging(account: str = Query(pattern='^(1110|1120|2101)$'),
               pr: Principal = Depends(require_perm('reports.view'))):
     db.commit()
     return R.aging_report(db, pr.tenant_id, account, as_of)
+
+
+@router.get('/reports/hotel/daily', response_model=HotelDailyReportOut)
+def get_hotel_daily(business_day: date = Query(),
+                    branch_id: str | None = Query(default=None),
+                    db: Session = Depends(get_db),
+                    pr: Principal = Depends(require_perm('reports.view'))):
+    return R.hotel_daily_report(db, pr.tenant_id, business_day,
+                                _scoped_branch(pr, branch_id))
+
+
+@router.get('/reports/hotel/range', response_model=HotelRangeReportOut)
+def get_hotel_range(from_: date = Query(alias='from'), to: date = Query(),
+                   branch_id: str | None = Query(default=None),
+                   db: Session = Depends(get_db),
+                   pr: Principal = Depends(require_perm('reports.view'))):
+    return R.hotel_daily_range(db, pr.tenant_id, from_, to,
+                               _scoped_branch(pr, branch_id))

@@ -38,6 +38,7 @@ import UsersPage from './pages/Users'
 import Police from './pages/Police'
 import ProductSetup from './pages/ProductSetup'
 import Backups from './pages/Backups'
+import HotelReports from './pages/HotelReports'
 
 export default function App() {
   const { session } = useAuth()
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
         <Route path="setup" element={<ProductSetup />} />
         <Route path="backups" element={<Backups />} />
+        <Route path="hotel-reports" element={<HotelReports />} />
           <Route path="police" element={<Police />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<Journals />} />
