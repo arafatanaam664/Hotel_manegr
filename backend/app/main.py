@@ -89,6 +89,13 @@ def _ensure_additive_columns(eng) -> None:
                 ('office_label', "VARCHAR(40) NOT NULL DEFAULT ''")):
             if col not in cols:
                 alters.append(f'ALTER TABLE tenants ADD COLUMN {col} {ddl}')
+    if 'tenant_product_configs' in insp.get_table_names():
+        cols = {c['name'] for c in insp.get_columns('tenant_product_configs')}
+        for col, ddl in (
+                ('installer_identity', "VARCHAR(120) NOT NULL DEFAULT ''"),
+                ('installation_locked_at', 'TIMESTAMP NULL')):
+            if col not in cols:
+                alters.append(f'ALTER TABLE tenant_product_configs ADD COLUMN {col} {ddl}')
     if alters:
         with eng.begin() as conn:
             for ddl in alters:

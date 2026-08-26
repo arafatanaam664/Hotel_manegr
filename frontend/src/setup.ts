@@ -16,7 +16,11 @@ export type ProductConfig = {
   modules_enabled: string[]
   feature_flags: Record<string, boolean>
   configured_by: string | null
+  installer_identity: string
   completed_at: string | null
+  installation_locked_at: string | null
+  is_locked: boolean
+  installer_only: boolean
   version: number
   updated_at: string | null
 }
@@ -28,13 +32,15 @@ export type ProductConfigInput = {
   feature_flags: Record<string, boolean>
   multi_branch: boolean
   complete: boolean
+  installer_identity: string
 }
 
 export const setupApi = {
   catalog: () => api<ProductCatalog>('/api/setup/catalog'),
   product: () => api<ProductConfig>('/api/setup/product'),
-  saveProduct: (body: ProductConfigInput) => api<ProductConfig>('/api/setup/product', {
+  saveProduct: (body: ProductConfigInput, installerToken: string) => api<ProductConfig>('/api/setup/product', {
     method: 'PUT',
+    headers: { 'X-Installer-Token': installerToken },
     body: JSON.stringify(body),
   }),
 }

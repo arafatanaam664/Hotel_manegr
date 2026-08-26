@@ -343,6 +343,7 @@ class ProductConfigIn(BaseModel):
     feature_flags: dict[str, bool] = Field(default_factory=dict)
     multi_branch: bool = False
     complete: bool = False
+    installer_identity: str = Field(default='', max_length=120)
 
 
 class ProductConfigOut(BaseModel):
@@ -353,7 +354,11 @@ class ProductConfigOut(BaseModel):
     modules_enabled: list[str]
     feature_flags: dict[str, bool]
     configured_by: str | None = None
+    installer_identity: str = ''
     completed_at: str | None = None
+    installation_locked_at: str | None = None
+    is_locked: bool = False
+    installer_only: bool = True
     version: int
     updated_at: str | None = None
 

@@ -6,6 +6,7 @@ import sys
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['SEED_ON_STARTUP'] = 'false'
 os.environ['JWT_SECRET'] = 'test-secret-0123456789'
+os.environ['INSTALLER_TOKEN'] = 'test-installer-token-0123456789-strong'
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -19,6 +20,14 @@ from app.main import create_app  # noqa: E402
 from app.seed import seed_if_empty  # noqa: E402
 
 ADMIN = {'username': 'admin', 'password': 'admin123!Change'}
+
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    from app.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture()

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     admin_username: str = 'admin'
     admin_password: str = 'admin123!Change'   # محلي فقط — cloud يتطلب تجاوزها
     demo_tenant_name: str = 'فندق النموذج التجريبي'
+    installer_token: str = ''  # يُحقن في جهاز العميل ولا يُحفظ في الواجهة
 
     # الترخيص (ملف 07) — المفتاح الخاص لا يمر عبر الإعدادات أبداً (شركة فقط)
     license_public_key_pem: str = ''     # حقن مباشر (اختبارات/نشر سحابي)
@@ -71,6 +72,8 @@ def validate_runtime_settings(s: Settings) -> None:
         raise RuntimeError('BOOTSTRAP_PROFILE=COMMERCIAL is required in production')
     if s.admin_password == 'admin123!Change' or len(s.admin_password) < 12:
         raise RuntimeError('ADMIN_PASSWORD must be replaced in production')
+    if len(s.installer_token) < 32:
+        raise RuntimeError('INSTALLER_TOKEN must be at least 32 characters in production')
     if s.cors_allowed_origins.strip() == '*':
         raise RuntimeError('CORS_ALLOWED_ORIGINS cannot be * in production')
     if s.deployment_mode.lower() in {'cloud', 'hybrid'} and not s.database_url:

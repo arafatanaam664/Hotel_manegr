@@ -5,12 +5,15 @@
 للمستخدمين من تلقاء نفسها.
 """
 from datetime import datetime, timezone
+import hmac
+
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models as m
+from .config import get_settings
 from .security import new_uuid, utcnow
 
 DEPLOYMENT_MODES = {'LOCAL', 'CLOUD', 'HYBRID'}
@@ -125,7 +128,11 @@ def serialize(cfg: m.TenantProductConfig) -> dict:
         'modules_enabled': sorted(cfg.modules_enabled or []),
         'feature_flags': cfg.feature_flags or {},
         'configured_by': cfg.configured_by,
+        'installer_identity': cfg.installer_identity,
         'completed_at': cfg.completed_at.isoformat() if cfg.completed_at else None,
+        'installation_locked_at': cfg.installation_locked_at.isoformat() if cfg.installation_locked_at else None,
+        'is_locked': bool(cfg.installation_locked_at),
+        'installer_only': True,
         'version': cfg.version,
         'updated_at': cfg.updated_at.isoformat() if cfg.updated_at else None,
     }
@@ -146,7 +153,19 @@ def _licensed_modules(db: Session, tenant_id: str) -> set[str]:
 def update_config(db: Session, tenant_id: str, actor_id: str, *,
                   deployment_mode: str, property_type: str,
                   modules_enabled: list[str], feature_flags: dict,
-                  multi_branch: bool, complete: bool) -> dict:
+                  multi_branch: bool, complete: bool,
+                  installer_token: str | None = None,
+                  installer_identity: str = '') -> dict:
+    cfg = get_or_create(db, tenant_id)
+    settings = get_settings()
+    if cfg.installation_locked_at:
+        _error('SETUP.LOCKED',
+               'إعداد خصائص النظام مقفل بعد التثبيت ولا يغيّره إلا إجراء مصرح من شركة الأنظمة.', 403)
+    expected = settings.installer_token
+    if not expected or not installer_token or not hmac.compare_digest(
+            installer_token, expected):
+        _error('SETUP.INSTALLER_TOKEN_REQUIRED',
+               'يلزم رمز تثبيت صالح صادر لموظف شركة الأنظمة.', 403)
     mode = deployment_mode.upper()
     prop = property_type.upper()
     if mode not in DEPLOYMENT_MODES:
@@ -162,14 +181,15 @@ def update_config(db: Session, tenant_id: str, actor_id: str, *,
     if complete and 'HOTEL' not in modules:
         _error('SETUP.HOTEL_MODULE_REQUIRED',
                'يجب تفعيل وحدة الفندق قبل إكمال إعداد منشأة فندقية')
-    cfg = get_or_create(db, tenant_id)
     cfg.deployment_mode = mode
     cfg.property_type = prop
     cfg.modules_enabled = modules
     cfg.feature_flags = features
     cfg.setup_state = 'COMPLETED' if complete else 'IN_PROGRESS'
     cfg.configured_by = actor_id
+    cfg.installer_identity = installer_identity[:120] if installer_identity else cfg.installer_identity
     cfg.completed_at = utcnow() if complete else None
+    cfg.installation_locked_at = cfg.completed_at if complete else None
     cfg.version = (cfg.version or 0) + 1
     cfg.updated_at = utcnow()
     db.flush()

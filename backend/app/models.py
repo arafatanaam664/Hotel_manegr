@@ -49,6 +49,9 @@ class TenantProductConfig(Base):
     modules_enabled: Mapped[list] = mapped_column(JSONType, default=list)
     feature_flags: Mapped[dict] = mapped_column(JSONType, default=dict)
     configured_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    installer_identity: Mapped[str] = mapped_column(String(120), default='')
+    installation_locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)

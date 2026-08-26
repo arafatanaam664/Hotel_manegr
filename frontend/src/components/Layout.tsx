@@ -5,31 +5,34 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { licApi, LicenseStatus } from '../license'
 import ChangePasswordModal from './ChangePassword'
+import { setupApi, ProductConfig } from '../setup'
 
-const NAV = [
+type NavItem = { to: string; label: string; icon: string; end?: boolean; perm?: string; module?: string; feature?: string; installerOnly?: boolean }
+
+const NAV: NavItem[] = [
   { to: '/', label: 'لوحة القيادة', icon: '◈', end: true },
-  { to: '/front-desk', label: 'مكتب الاستقبال', icon: '🛎', perm: 'frontdesk.view' },
-  { to: '/reservations', label: 'الحجوزات', icon: '📅', perm: 'reservations.view' },
-  { to: '/guests', label: 'النزلاء والشركات', icon: '👤', perm: 'guests.view' },
-  { to: '/night-audit', label: 'التدقيق الليلي', icon: '🌙', perm: 'frontdesk.view' },
-  { to: '/police', label: 'المعلومية اليومية', icon: '🛂', perm: 'police.report' },
-  { to: '/rooms', label: 'الغرف والأسعار', icon: '🛏', perm: 'frontdesk.view' },
-  { to: '/pos', label: 'شاشة البيع', icon: '🍽', perm: 'pos.sell' },
-  { to: '/pos/orders', label: 'الطلبات والفواتير', icon: '🧾', perm: 'pos.view' },
-  { to: '/pos/shifts', label: 'الورديات وZ', icon: '⏱', perm: 'pos.view' },
-  { to: '/pos/catalog', label: 'كتالوج البيع', icon: '🗂', perm: 'pos.view' },
-  { to: '/pos/reports', label: 'تقارير البيع', icon: '📈', perm: 'pos.reports' },
-  { to: '/inv/catalog', label: 'كتالوج المخزون', icon: '📦', perm: 'inv.view' },
-  { to: '/inv/purchasing', label: 'دورة المشتريات', icon: '🛒', perm: 'inv.view' },
-  { to: '/inv/operations', label: 'حركة المخزون', icon: '🔄', perm: 'inv.view' },
-  { to: '/inv/reports', label: 'تقارير المخزون', icon: '📊', perm: 'inv.reports' },
-  { to: '/hr/people', label: 'شؤون الموظفين', icon: '👥', perm: 'hr.view' },
-  { to: '/hr/time', label: 'الوقت والحضور', icon: '⏰', perm: 'hr.view' },
-  { to: '/hr/payroll', label: 'الرواتب والمسيرات', icon: '💰', perm: 'hr.view' },
-  { to: '/hr/reports', label: 'تقارير التوظيف', icon: '📈', perm: 'hr.reports' },
-  { to: '/fin/assets', label: 'الأصول الثابتة', icon: '🏭', perm: 'fa.view' },
+  { to: '/front-desk', label: 'مكتب الاستقبال', icon: '🛎', perm: 'frontdesk.view', module: 'HOTEL' },
+  { to: '/reservations', label: 'الحجوزات', icon: '📅', perm: 'reservations.view', module: 'HOTEL' },
+  { to: '/guests', label: 'النزلاء والشركات', icon: '👤', perm: 'guests.view', module: 'HOTEL' },
+  { to: '/night-audit', label: 'التدقيق الليلي', icon: '🌙', perm: 'frontdesk.view', module: 'HOTEL' },
+  { to: '/police', label: 'المعلومية اليومية', icon: '🛂', perm: 'police.report', module: 'HOTEL', feature: 'POLICE_REPORT' },
+  { to: '/rooms', label: 'الغرف والأسعار', icon: '🛏', perm: 'frontdesk.view', module: 'HOTEL' },
+  { to: '/pos', label: 'شاشة البيع', icon: '🍽', perm: 'pos.sell', module: 'POS', feature: 'POINT_OF_SALE' },
+  { to: '/pos/orders', label: 'الطلبات والفواتير', icon: '🧾', perm: 'pos.view', module: 'POS', feature: 'POINT_OF_SALE' },
+  { to: '/pos/shifts', label: 'الورديات وZ', icon: '⏱', perm: 'pos.view', module: 'POS', feature: 'POINT_OF_SALE' },
+  { to: '/pos/catalog', label: 'كتالوج البيع', icon: '🗂', perm: 'pos.view', module: 'POS', feature: 'POINT_OF_SALE' },
+  { to: '/pos/reports', label: 'تقارير البيع', icon: '📈', perm: 'pos.reports', module: 'POS', feature: 'POINT_OF_SALE' },
+  { to: '/inv/catalog', label: 'كتالوج المخزون', icon: '📦', perm: 'inv.view', module: 'INVENTORY' },
+  { to: '/inv/purchasing', label: 'دورة المشتريات', icon: '🛒', perm: 'inv.view', module: 'INVENTORY' },
+  { to: '/inv/operations', label: 'حركة المخزون', icon: '🔄', perm: 'inv.view', module: 'INVENTORY' },
+  { to: '/inv/reports', label: 'تقارير المخزون', icon: '📊', perm: 'inv.reports', module: 'INVENTORY' },
+  { to: '/hr/people', label: 'شؤون الموظفين', icon: '👥', perm: 'hr.view', module: 'HR' },
+  { to: '/hr/time', label: 'الوقت والحضور', icon: '⏰', perm: 'hr.view', module: 'HR' },
+  { to: '/hr/payroll', label: 'الرواتب والمسيرات', icon: '💰', perm: 'hr.view', module: 'HR' },
+  { to: '/hr/reports', label: 'تقارير التوظيف', icon: '📈', perm: 'hr.reports', module: 'HR' },
+  { to: '/fin/assets', label: 'الأصول الثابتة', icon: '🏭', perm: 'fa.view', module: 'ASSETS' },
   { to: '/fin/statements', label: 'القوائم المالية', icon: '🧾', perm: 'reports.view' },
-  { to: '/hotel-reports', label: 'تقارير الفندق', icon: '📊', perm: 'reports.view' },
+  { to: '/hotel-reports', label: 'تقارير الفندق', icon: '📊', perm: 'reports.view', module: 'HOTEL' },
   { to: '/fin/close', label: 'الإقفال والفترات', icon: '🔐', perm: 'periods.close' },
   { to: '/accounts', label: 'دليل الحسابات', icon: '☷', perm: 'accounts.view' },
   { to: '/journals', label: 'القيود اليومية', icon: '✎', perm: 'journals.view' },
@@ -39,7 +42,7 @@ const NAV = [
   { to: '/audit', label: 'سجل التدقيق', icon: '🛡', perm: 'audit.view' },
   { to: '/sync', label: 'مركز المزامنة', icon: '🔄', perm: 'sync.view' },
   { to: '/users', label: 'المستخدمون والصلاحيات', icon: '👥', perm: 'users.manage' },
-  { to: '/setup', label: 'إعداد المنتج والتثبيت', icon: '⚙', perm: 'settings.manage' },
+  { to: '/setup', label: 'إعداد المنتج والتثبيت', icon: '⚙', installerOnly: true },
   { to: '/backups', label: 'النسخ الاحتياطي', icon: '💾', perm: 'settings.manage' },
   { to: '/license', label: 'حالة الترخيص', icon: '🔑' },
 ]
@@ -99,6 +102,15 @@ export default function Layout() {
   const { session, logout, has } = useAuth()
   const nav = useNavigate()
   const [cpOpen, setCpOpen] = useState(false)
+  const [product, setProduct] = useState<ProductConfig | null>(null)
+  useEffect(() => {
+    let alive = true
+    setupApi.product().then(value => { if (alive) setProduct(value) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+  const moduleEnabled = (code?: string) => !code || !product || product.modules_enabled.includes(code)
+  const featureEnabled = (code?: string) => !code || !product || product.feature_flags[code] === true
+  const visibleNav = NAV.filter(n => !n.installerOnly && (!n.perm || has(n.perm)) && moduleEnabled(n.module) && featureEnabled(n.feature))
   return (
     <div className="min-h-screen bg-slate-100 flex">
       {/* الشريط الجانبي */}
@@ -108,7 +120,7 @@ export default function Layout() {
           <div className="text-[11px] text-white/50 mt-1">إدارة الفنادق — محاسبة وتشغيل</div>
         </div>
         <nav className="flex-1 py-4 px-3 space-y-1">
-          {NAV.filter((n) => !n.perm || has(n.perm)).map((n) => (
+          {visibleNav.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

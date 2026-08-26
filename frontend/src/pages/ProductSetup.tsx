@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Btn, Card, ErrorNote, OkNote, Spinner } from '../components/ui'
-import { useAuth } from '../auth'
 import { setupApi, ProductCatalog, ProductConfig } from '../setup'
+import { useSearchParams } from 'react-router-dom'
 
 const modeLabels: Record<string, string> = {
   LOCAL: 'محلي داخل الفندق',
@@ -24,7 +24,10 @@ const featureOrder = [
 ]
 
 export default function ProductSetup() {
-  const { has } = useAuth()
+  const [searchParams] = useSearchParams()
+  const installerMode = searchParams.get('installer') === '1'
+  const [installerToken, setInstallerToken] = useState('')
+  const [installerIdentity, setInstallerIdentity] = useState('')
   const [catalog, setCatalog] = useState<ProductCatalog | null>(null)
   const [config, setConfig] = useState<ProductConfig | null>(null)
   const [mode, setMode] = useState('LOCAL')
@@ -64,10 +67,13 @@ export default function ProductSetup() {
     [catalog],
   )
 
-  if (!has('settings.manage')) {
-    return <Card title="إعداد المنتج"><p className="text-slate-600">هذه الشاشة متاحة لمدير النظام المخوّل فقط.</p></Card>
+  if (!installerMode) {
+    return <Card title="إعداد خصائص النظام"><p className="text-slate-600">إعداد خصائص المنتج والتثبيت الأول يتم بواسطة موظف شركة الأنظمة فقط. مالك الفندق لا يملك صلاحية تعديل هذه الإعدادات.</p></Card>
   }
   if (loading) return <Spinner />
+  if (config?.is_locked) {
+    return <Card title="إعداد خصائص النظام مقفل"><p className="text-slate-600">تم إكمال التثبيت وقفل خصائص المنتج. أي تغيير لاحق يحتاج إجراءً مصرحاً من شركة الأنظمة وإصدار ترخيص جديد.</p></Card>
+  }
 
   const toggleModule = (code: string) => {
     if (code === 'ACCOUNTING') return
@@ -96,7 +102,8 @@ export default function ProductSetup() {
         feature_flags: { ...features, MULTI_BRANCH: multiBranch },
         multi_branch: multiBranch,
         complete,
-      })
+        installer_identity: installerIdentity,
+      }, installerToken)
       setConfig(next)
       setModules(next.modules_enabled)
       setFeatures(next.feature_flags)
@@ -122,6 +129,14 @@ export default function ProductSetup() {
 
       <ErrorNote msg={error} />
       <OkNote msg={ok} />
+
+      <Card title="صلاحية موظف شركة الأنظمة">
+        <p className="text-sm text-slate-600 mb-3">أدخل الرمز الذي سلّمته الشركة لموظف التثبيت. لا تحفظه في جهاز العميل ولا تشاركه مع مالك الفندق.</p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="text-sm text-slate-600">هوية المثبت<input value={installerIdentity} onChange={e => setInstallerIdentity(e.target.value)} placeholder="اسم الموظف أو رقم أمر التثبيت" className="mt-1 w-full border rounded-xl px-3 py-2" /></label>
+          <label className="text-sm text-slate-600">رمز التثبيت<input type="password" value={installerToken} onChange={e => setInstallerToken(e.target.value)} placeholder="INSTALLER TOKEN" className="mt-1 w-full border rounded-xl px-3 py-2" /></label>
+        </div>
+      </Card>
 
       <Card title="1. نمط التشغيل ونوع المنشأة">
         <div className="grid md:grid-cols-2 gap-4">
