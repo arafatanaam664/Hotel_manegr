@@ -1,0 +1,232 @@
+================================================================================
+11 — مخطط قاعدة البيانات الرئيسي (Database Master Schema)
+نظام أثير لإدارة الفنادق | الإصدار 1.0 | 2026-08-04
+DBMS: PostgreSQL 15+ | كل الجداول بلا استثناء: tenant_id + حقول التدقيق
+الأحرف: أسماء إنجليزية snake_case؛ الأنواع: uuid, text, numeric(19,4) للمبالغ
+القاعدة الحاكمة للأموال: مبالغ numeric(19,4) (لا float أبداً)، العملات char(3)
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+(أ) النواة المؤسسية (تنظيم/أمان/تدقيق)
+──────────────────────────────────────────────────────────────────────────────
+tenants(id, legal_name, trade_name, country, base_currency char(3),
+        fiscal_year_start_month int, timezone, status, created_at...)
+branches(id, tenant_id, code, name, address, is_active)
+users(id, tenant_id, username UNIQUE/tenant, email, phone, password_hash,
+      full_name, is_active, mfa_secret_enc, mfa_enabled bool, last_login_at,
+      failed_attempts, locked_until)
+roles(id, tenant_id NULL→دور نظام, code, name, description, is_system bool)
+permissions(code PK, module, description)            -- قائمة ذرية موسومة
+role_permissions(role_id, permission_code, PK مركّب)
+user_roles(user_id, role_id, branch_scope jsonb NULL=كل الفروع)
+user_branch_limits(user_id, branch_id)               -- قيد النطاق
+sessions(id, user_id, refresh_family_id, device_info, ip, issued_at,
+         expires_at, revoked_at, reused_detected bool)
+audit_log(                                            -- Append-Only — ملف 13
+  id BIGSERIAL, tenant_id, at_utc timestamptz, actor_user_id NULL(نظام),
+  actor_type, module, action, entity, entity_id, before jsonb, after jsonb,
+  ip, device, business_date date, prev_hash bytea, row_hash bytea,
+  PARTITION BY RANGE (at_utc))
+feature_flags(tenant_id, flag, enabled bool, payload jsonb)
+
+──────────────────────────────────────────────────────────────────────────────
+(ب) النواة المحاسبية — ملف 02 هو المرجع الدلالي
+──────────────────────────────────────────────────────────────────────────────
+currencies(code char(3) PK, name, symbol, decimal_places int, is_active)
+exchange_rates(id, currency_code, rate numeric(19,8), rate_date, source,
+               entered_by, UNIQUE(currency_code, rate_date))
+fiscal_years(id, tenant_id, year_no, start_date, end_date, status
+             OPEN|CLOSED)
+fiscal_periods(id, fiscal_year_id, period_no, start_date, end_date,
+               status OPEN|SOFT_CLOSED|HARD_CLOSED, closed_by, closed_at)
+accounts(id, tenant_id, code, name_ar, name_en, parent_id NULL,
+         level int, type ASSET|LIABILITY|EQUITY|REVENUE|EXPENSE|COGS|SYSTEM,
+         nature DEBIT|CREDIT, currency_code NULL=أي, is_postable bool,
+         is_active bool, party_required bool, is_system bool,
+         UNIQUE(tenant_id, code))
+account_mappings(                     -- خريطة الربط §6 ملف 02 — حساسة التعديل
+  id, tenant_id, event_type, context_key NULL(فرع/منفذ/قسم),
+  template jsonb [{account_code, side, amount_from, cost_center_rule}],
+  effective_from, effective_to NULL, version, edited_by, edited_at)
+journal_entries(                      -- Append-Only بعد POST
+  id, tenant_id, branch_id, journal_type, entry_no, entry_date date,
+  posting_date timestamptz, period_id, currency_code,
+  status DRAFT|POSTED|REVERSED, narration, reference,
+  source_type NULL, source_id uuid NULL, event_key text NULL UNIQUE,
+  reversed_entry_id NULL, reversal_of_entry_id NULL,
+  created_by, posted_by, approved_by NULL, created_at, posted_at, row_hash,
+  UNIQUE(tenant_id, journal_type, entry_no))
+journal_entry_lines(
+  id, entry_id FK, tenant_id, line_no int, account_id FK,
+  debit_base numeric(19,4) DEFAULT 0 CHECK ≥0,
+  credit_base numeric(19,4) DEFAULT 0 CHECK ≥0,
+  CHECK (debit_base=0 OR credit_base=0),
+  currency_code, debit_fcy, credit_fcy, fx_rate,
+  party_type NULL, party_id NULL, cost_center_id NULL, description,
+  PARTITION BY RANGE (entry_date))
+cost_centers(id, tenant_id, code, name, type DEPARTMENT|OUTLET, is_active)
+taxes(id, tenant_id, code, name, rate numeric(7,4), inclusive bool,
+      liability_account_id, applies_to jsonb, valid_from, valid_to NULL)
+budgets(id, tenant_id, fiscal_year_id, account_id, month, amount)
+  -- مرحلة 2 (موازنات تقديرية ومقارنات)
+
+──────────────────────────────────────────────────────────────────────────────
+(ج) الفندق
+──────────────────────────────────────────────────────────────────────────────
+room_types(id, tenant_id, code, name_ar, name_en, capacity_adults,
+           capacity_children, bed_config, amenities jsonb, base_rate,
+           display_order, is_active)
+rooms(id, tenant_id, branch_id, room_no, floor, room_type_id, attributes
+      jsonb, hk_status CLEAN|INSPECTED|DIRTY|CLEANING, ooo_status NULL|
+      OOO|OOS, ooo_reason, ooo_from, ooo_to, UNIQUE(branch_id, room_no))
+rate_plans(id, tenant_id, code, name, includes_meals jsonb,
+           cancellation_policy jsonb, min_nights, tax_inclusive bool,
+           allowed_channels jsonb, is_active)
+rate_calendar(id, rate_plan_id, room_type_id, date, price, UNIQUE(plan,
+              type, date))
+extras(id, tenant_id, code, name, price, revenue_account_id, is_active)
+guests(id, tenant_id, full_name, id_type, id_number_enc, nationality,
+       phone, email, vip_flag, blacklisted bool, blacklist_reason, notes)
+corporates(id, tenant_id, name, contact jsonb, credit_limit, discount_pct,
+           settlement_cycle, billing_email, ar_party_key UNIQUE)
+reservations(
+  id, tenant_id, branch_id, res_no UNIQUE/site, guest_id, corporate_id NULL,
+  source, status TENTATIVE|CONFIRMED|CHECKED_IN|CHECKED_OUT|CANCELLED|NO_SHOW,
+  room_type_id, room_id NULL, rate_plan_id, adults, children,
+  checkin_date, checkout_date, nightly_rate numeric, total_estimated,
+  deposit_amount, deposit_paid, special_requests, created_by, version,
+  cancelled_reason, is_day_use bool, UNIQUE(event_key ...))
+reservations_room_range(...المفتاح الزمني الحصري: EXCLUDE USING gist
+  (room_id WITH =, tstzrange(from,to) WITH &&) WHERE status NOT IN
+  (CANCELLED,NO_SHOW))        -- منع الحجز المزدوج بنيوياً
+reservation_nights(id, reservation_id, night_date, rate, posted bool,
+                   UNIQUE(reservation_id, night_date))
+folios(id, tenant_id, reservation_id, folio_no, type GUEST|COMPANY|MASTER,
+       status OPEN|CLOSED, credit_limit, closed_at)
+folio_charges(                            -- Snapshot سعري كامل
+  id, folio_id, charge_date, business_date, item_desc, qty, unit_price,
+  discount, tax_rate, tax_amount, net, gross, revenue_account_id,
+  source POS|ROOM|EXTRA|ADJUST, source_id, posted_entry_id, posted bool)
+folio_payments(id, folio_id, method CASH|CARD|BANK|WALLET|CITY_LEDGER,
+               amount, currency_code, fx_rate, reference, cashier_id,
+               business_date, posted_entry_id)
+night_audits(id, tenant_id, branch_id, business_date UNIQUE/branch,
+             run_by, started_at, completed_at, checks jsonb, report_pdf_uri)
+business_days(tenant_id, branch_id, current_business_date date)  -- صف واحد/فرع
+
+──────────────────────────────────────────────────────────────────────────────
+(د) نقاط البيع
+──────────────────────────────────────────────────────────────────────────────
+pos_outlets(id, tenant_id, branch_id, code, name, warehouse_id,
+            cash_account_id, cost_center_id, revenue_map jsonb, is_active)
+pos_categories(id, tenant_id, name, color, sort)
+pos_items(id, tenant_id, code, category_id, name_ar, name_en, price,
+          tax_inclusive bool, tax_id NULL, revenue_account_id,
+          item_type STOCKED|SERVICE|COMBO, inventory_item_id NULL, is_active)
+pos_modifiers(id, item_id, name, price_delta)
+pos_orders(id, tenant_id, outlet_id, order_no, status OPEN|FIRED|SETTLED|
+           VOID, table_no NULL, room_folio_id NULL, corporate_id NULL,
+           opened_by, opened_at, settled_at)
+pos_order_lines(id, order_id, item_id, qty, unit_price, modifiers jsonb,
+                discount, tax_amount, gross, unit_cost, cost_snapshot jsonb)
+pos_payments(id, order_id, method, amount, change, card_ref, folio_id NULL)
+pos_shifts(id, outlet_id, opened_by, opened_at, closed_by, closed_at,
+           opening_float, counted_cash, system_cash, variance,
+           z_report_pdf_uri, UNIQUE: وردية مفتوحة واحدة/منفذ)
+recipes(id, tenant_id, pos_item_id, inventory_item_id, qty, waste_pct)
+kds_tickets(id, order_id, station, status, fired_at, done_at)
+
+──────────────────────────────────────────────────────────────────────────────
+(هـ) المخزون والمشتريات
+──────────────────────────────────────────────────────────────────────────────
+inv_items(id, tenant_id, code, name, category, base_unit, alt_units jsonb,
+          barcode, reorder_level, safety_stock, inventory_account_id,
+          track_batch bool, track_expiry bool, valuation AVG|FIFO, is_active)
+warehouses(id, tenant_id, branch_id, code, name, keeper_user_id,
+           inventory_account_id)
+inv_balances(                              -- كاش مشتق — قابل لإعادة البناء
+  item_id, warehouse_id, qty numeric(19,4), avg_cost numeric(19,6),
+  last_movement_at, PK(item_id, warehouse_id))
+inv_ledger(                                -- Append-Only — الحقيقة
+  id, tenant_id, item_id, warehouse_id, move_type IN|OUT|TRANSFER|ADJUST,
+  qty, unit_cost, value, batch_no NULL, expiry NULL, ref_type, ref_id,
+  by_user, business_date, created_at, entry_id NULL)
+suppliers(id, tenant_id, name, contact jsonb, terms_days, currency_code,
+          ap_party_key UNIQUE, rating jsonb)
+purchase_orders(id, tenant_id, po_no, supplier_id, order_date, expected_date,
+                status DRAFT|APPROVED|PARTIAL|RECEIVED|CLOSED|CANCELLED,
+                total, approved_by, version)
+purchase_order_lines(id, po_id, item_id, qty, unit_price, received_qty)
+grn(id, tenant_id, grn_no, po_id NULL, supplier_id, warehouse_id,
+    received_date, invoice_no, status, posted_entry_id, lines jsonb
+    مقابل جدول أبناء grn_lines(item_id, qty, unit_price, batch, expiry))
+supplier_invoices(id, tenant_id, supplier_id, invoice_no, invoice_date,
+                  total, paid, matched GRN ids, posted_entry_id)
+stock_transfers(id, from_wh, to_wh, status PENDING|RECEIVED, lines jsonb)
+stock_counts(id, warehouse_id, count_date, status, lines jsonb, approved_by,
+             posted_entry_id)
+
+──────────────────────────────────────────────────────────────────────────────
+(و) الموارد البشرية
+──────────────────────────────────────────────────────────────────────────────
+departments(id, tenant_id, code, name, cost_center_id, payroll_account_id)
+positions(id, department_id, title, grade)
+employees(id, tenant_id, emp_no, full_name, national_id_enc, department_id,
+          position_id, hire_date, contract_type, base_salary, allowances
+          jsonb, bank_enc NULL, status ACTIVE|SUSPENDED|TERMINATED,
+          termination_date NULL, branch_id)
+shifts(id, tenant_id, name, from_time, to_time, overnight bool)
+rosters(id, employee_id, date, shift_id)
+attendance(id, employee_id, date, status, in_time, out_time, late_min,
+           early_min, overtime_hours_approved, approved_by,
+           UNIQUE(employee_id, date))
+leave_types(id, tenant_id, code, name, paid bool, accrual_per_month)
+leave_requests(id, employee_id, leave_type_id, from_date, to_date, days,
+               status PENDING|APPROVED|REJECTED, approved_by)
+leave_balances(employee_id, leave_type_id, year, entitled, used,
+               PK(emp,type,year))
+employee_advances(id, employee_id, amount, date, installments,
+                  installment_amount, remaining, status, posted_entry_id)
+pay_items(id, tenant_id, code, name, type EARNING|DEDUCTION, calc FIXED|
+          PCT_BASE|FORMULA, formula jsonb, taxable bool, account_map jsonb)
+payroll_runs(id, tenant_id, month, status DRAFT|REVIEWED|APPROVED|POSTED|
+             PAID, prepared_by, approved_by, posted_entry_id, UNIQUE(month))
+payslips(id, payroll_run_id, employee_id, gross, deductions, net,
+         items_snapshot jsonb, posted_entry_id)
+eos_provisions(id, employee_id, month, amount, posted_entry_id)  -- مخصص ميزة
+
+──────────────────────────────────────────────────────────────────────────────
+(ز) الأصول الثابتة
+──────────────────────────────────────────────────────────────────────────────
+fa_assets(id, tenant_id, code, name, category, purchase_date, cost,
+          salvage, useful_life_months, method STRAIGHT|DECLINING,
+          asset_account_id, accum_account_id, expense_account_id, status)
+fa_depreciation_runs(id, month, lines jsonb, posted_entry_id)
+
+──────────────────────────────────────────────────────────────────────────────
+(ح) الترخيص/المزامنة/النظام
+──────────────────────────────────────────────────────────────────────────────
+license_state(site_id PK, tenant_id, payload_signed jsonb, valid_until,
+              grace_until, last_check, clock_anchor_date, state)
+sync_events_out(                            -- Outbox — ملف 09
+  id BIGSERIAL, site_id, seq BIGINT, tenant_id, entity, entity_id, op,
+  payload jsonb, occurred_at, acked_at NULL, state, PARTITION BY month)
+sync_events_in(id, site_id, seq, payload jsonb, received_at, applied_at,
+               state, UNIQUE(site_id, seq))
+sync_conflicts(id, entity, entity_id, local_val jsonb, remote_val jsonb,
+               detected_at, resolution NULL, resolved_by NULL)
+jobs(id, type, payload jsonb, run_at, state, attempts, last_error)
+idempotency_keys(key PK, tenant_id, response_hash, created_at)   -- API §12
+notification_queue(id, tenant_id, channel, template, payload, state)
+attachment_files(id, tenant_id, uri, sha256, size, enc_key_id, owner...)
+
+ملاحظات تنفيذ إلزامية:
+1) كل جدول: created_at/updated_at/created_by + version (قفل تفاؤلي للتشغيلي).
+2) RLS بالسحابي: سياسة tenant_isolation على كل جدول + FORCE ROW LEVEL SECURITY.
+3) فهارس أداء مصممة مع كل Migration، و EXPLAIN إلزامي لاستعلامات التقارير.
+4) Migrations تقدمية فقط؛ مراجعة DBA لأي حذف عمود قبل نسختين منه (Deprecate→Drop).
+5) تفاصيل القيود والتريقرات المانعة للتعديل: ملف 02 §11؛ التقسيم الشهري:
+   audit_log, journal_entry_lines, inv_ledger, sync_events_out.
+
+سجل التغييرات: v1.0 (2026-08-04)
+================================================================================

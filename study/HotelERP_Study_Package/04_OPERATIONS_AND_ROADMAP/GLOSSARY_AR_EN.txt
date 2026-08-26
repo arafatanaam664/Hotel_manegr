@@ -1,0 +1,96 @@
+================================================================================
+قاموس المصطلحات عربي/إنجليزي (Glossary) — نظام أثير لإدارة الفنادق
+الإصدار 1.0 | 2026-08-04
+الغرض: ترجمة موحدة في الكود والواجهات والوثائق — ممنوع اختراع مرادف جديد
+داخل المنتج؛ أي مصطلح إضافي يُدرج هنا أولاً.
+================================================================================
+
+المصطلح العربي (المعتمد بالواجهة)      | English (المعتمد بالكود/DB)    | ملاحظة
+--------------------------------------|--------------------------------|------------------
+قيد يومية                              | Journal Entry                   | الرأس
+سطر قيد                                | Journal Entry Line               |
+ترحيل (القيد)                          | Posting                          | فعل لا رجوع عنه
+قيد عكسي                               | Reversal Entry                   |
+دليل الحسابات                          | Chart of Accounts (COA)          |
+حساب ورقي / أب                         | Leaf / Parent Account            |
+دفتر الأستاذ                           | General Ledger                   |
+ميزان المراجعة                         | Trial Balance                    |
+قائمة الدخل                            | Income Statement (P&L)           |
+الميزانية العمومية                     | Balance Sheet                    |
+قائمة التدفقات النقدية                 | Cash Flow Statement              |
+مركز التكلفة                           | Cost Center                      | قسم/منفذ
+المعيار الموحد لحسابات الفنادق         | USALI                            | مرجعية تصنيف
+الفترة المالية                         | Fiscal Period                    |
+الإقفال السنوي                         | Year-End Close                   |
+الأرباح المبقاة                        | Retained Earnings                |
+ذمم مدينة (عملاء)                      | Accounts Receivable (AR)         |
+ذمم دائنة (موردون)                     | Accounts Payable (AP)            |
+إعمار الذمم                            | Aging Report                     |
+ذمة النزيل داخل الفندق                 | Guest Ledger                     | حساب 1110
+ذمة المدينة (شركات)                    | City Ledger                      | حساب 1120
+أمانات الحجوزات / العربون               | Advance Deposits                 | حساب 2110
+إيراد مؤجل                              | Deferred Revenue                 |
+مخصص                                    | Provision                        |
+إهلاك / مجمع الإهلاك                    | Depreciation / Accumulated Dep.  |
+فروقات عملة دائنة/مدينة                 | FX Gain / FX Loss                |
+العملة الأساسية                         | Base Currency                    |
+حجز                                     | Reservation                      | حالاته حسب 03 §2
+تسجيل دخول / خروج                       | Check-in / Check-out             |
+دخول مباشر بدون حجز                     | Walk-in                          |
+عدم حضور                                | No-Show                          |
+فوليو (كشف حساب النزيل)                 | Folio                            |
+شحنة/تحميل على الفوليو                  | Charge / Post to Folio           |
+سند دفع عليه                            | Folio Payment                    |
+غرفة خارج الخدمة/الصيانة                | Out-of-Order / Out-of-Service    | OOO/OOS
+حالة النظافة                            | Housekeeping Status              |
+التدقيق الليلي                          | Night Audit                      | إجراء يومي
+تاريخ العمل                             | Business Date                    | لا يساوي تاريخ الجهاز
+خطة سعر                                 | Rate Plan                        |
+تقويم الأسعار                           | Rate Calendar                    |
+خدمة إضافية                             | Extra / Add-on                   |
+متوسط سعر الغرفة                        | ADR (Average Daily Rate)         |
+إيراد الغرفة المتاحة                    | RevPAR                           |
+نسبة الإشغال                            | Occupancy %                      |
+منفذ بيع                                | POS Outlet                       |
+وردية نقاط البيع                        | POS Shift                        |
+تقرير إقفال الوردية                     | Z-Report                         |
+أمر شراء                                | Purchase Order (PO)              |
+إذن استلام بضاعة                        | GRN (Goods Received Note)        |
+مطالبة مورد                             | Supplier Invoice                 |
+المطابقة الثلاثية                       | Three-Way Match                  | PO-GRN-Invoice
+مستودع                                  | Warehouse                        |
+حركة مخزون                              | Inventory Movement/Ledger        |
+جرد / جرد دوري                          | Stock Count / Cycle Count        |
+تكلفة المبيعات                          | COGS                             |
+متوسط التكلفة المرجح المتحرك            | Moving Weighted Average          |
+وصفة                                    | Recipe                           | أصناف مركبة
+مسير رواتب                              | Payroll Run                      |
+قسيمة راتب                              | Payslip                          |
+سلفة                                    | Employee Advance                 |
+استقطاع                                 | Deduction                        |
+مستحقات نهاية خدمة                      | EOSB                             |
+تفويض صلاحيات حسب الدور                 | RBAC                             |
+سجل التدقيق                             | Audit Log                        |
+فصل الواجبات                            | Segregation of Duties (SoD)      |
+صلاحية مزدوجة                           | Dual Control / Four-Eyes         |
+ترخيص                                   | License                          |
+بصمة الجهاز                             | Hardware Fingerprint             |
+قائمة الإلغاء                           | Revocation List                  |
+مستأجر / عميل نظام                      | Tenant                           |
+موقع (تثبيت محلي)                       | Site / On-Premise Node           |
+محرك المزامنة                           | Sync Engine                      |
+صندوق الصادر/الوارد                     | Outbox / Inbox                   |
+إقرار استلام حدث                        | ACK                              |
+مفتاح عدم تكرار                         | Idempotency Key                  |
+لوحة الشركة المالكة                     | Vendor Control Panel             |
+اتفاقية مستوى الخدمة                    | SLA                              |
+نقطة/زمن الاستعادة                      | RPO / RTO                        |
+إشعار دائن                              | Credit Note                      |
+
+قواعد ترجمة الواجهة:
+- «Post/ترحيل» تختصر دائماً «ترحيل» وأيقونته ↗؛ «Reversal» «عكس/قلب» وليس «إلغاء».
+- ممنوع: «سند يومية» بديلاً عن قيد؛ «أستاذ عام» نكتبها «دفتر الأستاذ العام».
+- الأرقام في الواجهة: لاتينية عربية (1,234.56) افتراضاً مع خيار شرقي (١٢٣٤).
+
+سجل التغييرات: v1.0 (2026-08-04)
+================================================================================

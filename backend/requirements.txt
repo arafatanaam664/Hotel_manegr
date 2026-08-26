@@ -1,0 +1,16 @@
+# سِجِلّ النُّزُل — اعتماديات الخادم (Python 3.11+)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+pydantic>=2.6
+pydantic-settings>=2.2
+PyJWT>=2.8
+argon2-cffi>=23.1
+pyotp>=2.9
+cryptography>=42   # تشفير هوية النزيل ساكناً (Fernet) — ملف 10
+openpyxl>=3.1      # مولّد «المعلومية اليومية» للبحث الجنائي — ملف Excel رسمي
+# قاعدة الإنتاج PostgreSQL (التطوير SQLite مدمج)
+psycopg[binary]>=3.1 ; python_version >= "3.11"
+# الاختبارات
+pytest>=8
+httpx>=0.27

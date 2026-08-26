@@ -1,0 +1,30 @@
+# بايثون
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# قواعد بيانات محلية (تطوير) — لا تُرفع أبداً
+*.db
+*.db-wal
+*.db-shm
+
+# أسرار البيئة
+.env
+.env.*
+!.env.example
+
+# الواجهة
+node_modules/
+frontend/dist/
+
+# نظام التشغيل
+.DS_Store
+
+# ناتج بناء TypeScript
+*.tsbuildinfo
+# مفاتيح الترخيص الخاصة (ملف 07 §7-5) — لا تدخل المستودع أبداً
+dev_keys/
+*.license
+license_private*.pem
+*_private.pem
